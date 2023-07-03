@@ -1,5 +1,7 @@
 # mux-leverage-protocol
 
+> This project is stil under development. Use it at your own risk!
+
 ## Overview
 
 Mux Leverage Protocol is a protocol for creating tranche tokens to boost rewards from MUX staking protocols.
