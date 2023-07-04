@@ -1,6 +1,7 @@
 # muxlp-tranches-protocol
 
-> This project is still under development. Use it at your own risk!
+> **:warning: Risk Disclaimer**<br> 
+> This project is still under development. Please use is at your own risks!
 
 ## Overview
 
