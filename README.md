@@ -1,12 +1,12 @@
-# mux-leverage-protocol
+# muxlp-tranches-protocol
 
-> This project is stil under development. Use it at your own risk!
+> This project is still under development. Use it at your own risk!
 
 ## Overview
 
-Mux Leverage Protocol is a protocol for creating tranche tokens to boost rewards from MUX staking protocols.
+MUXLP Tranches Protocol is a protocol for creating tranche tokens to boost rewards from MUX staking protocols.
 
-The core principle of Mux Leverage Protocol revolves around two distinct user groups: providers of stablecoins and borrowers who utilize these stablecoins to acquire MLP tokens. Through this process, users can maximize their potential returns.
+The core principle of MUXLP Tranches Protocol revolves around two distinct user groups: providers of stablecoins and borrowers who utilize these stablecoins to acquire MLP tokens. Through this process, users can maximize their potential returns.
 
 The protocol is designed to be used with the MUX protocol, but can be used with any ERC20 token.
 
@@ -14,13 +14,13 @@ The protocol is designed to be used with the MUX protocol, but can be used with 
 
 ![Alt text](misc/architecture.png?raw=true "Architecture")
 
-The Mux Leverage Protocol consists of four main components: SeniorVault, JuniorVault, RewardDistributor and Router.
+The MUXLP Tranches Protocol consists of four main components: SeniorVault, JuniorVault, RewardDistributor and Router.
 
 SeniorVault is primarily designed for users who do not wish to take on high risks. Users deposit stablecoins to provide liquidity for JuniorVault users to borrow and use for purchasing MLP tokens, thereby earning additional rewards. Meanwhile, SeniorVault users will receive a portion of the proceeds based on the utilization rate.
 
 JuniorVault users, on the other hand, bear the primary risk of MLP price fluctuations but also stand to gain higher returns.
 
-SeniorVault serves as a single entity to enhance the utilization of funds, while JuniorVaults can exist in multiple instances, each implementing its own strategy (eg, different leverage or different reward distibution).
+SeniorVault serves as a single entity to enhance the utilization of funds, while JuniorVaults can exist in multiple instances, each implementing its own strategy (eg, different leverage or different reward distribution).
 
 RewardDistributor is primarily responsible for the distribution of rewards.
 

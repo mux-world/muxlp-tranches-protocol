@@ -1,5 +1,5 @@
-import { ethers, network } from "hardhat";
-import { expect } from "chai";
+import {ethers, network} from "hardhat";
+import {expect} from "chai";
 import {
   toWei,
   toUnit,
@@ -10,7 +10,7 @@ import {
   u2b,
   PreMinedTokenTotalSupply,
 } from "../scripts/deployUtils";
-import { BigNumber } from "ethers";
+import {BigNumber} from "ethers";
 import {
   impersonateAccount,
   setBalance,
