@@ -12,21 +12,21 @@ interface IMuxLiquidityCallback {
     }
 
     function beforeFillLiquidityOrder(
-        LiquidityOrder calldata order,
-        uint96 assetPrice,
-        uint96 mlpPrice,
-        uint96 currentAssetValue,
-        uint96 targetAssetValue
+        LiquidityOrder calldata order, // the order to be filled
+        uint96 assetPrice, // the price of asset used in add / remove liquidity
+        uint96 mlpPrice, // the price of mlp
+        uint96 currentAssetValue, // the param used to calculate fee for liquidity
+        uint96 targetAssetValue // the param used to calculate fee for liquidity
     ) external returns (bool);
 
     function afterFillLiquidityOrder(
-        LiquidityOrder calldata order,
-        uint256 outAmount,
-        uint96 assetPrice,
-        uint96 mlpPrice,
-        uint96 currentAssetValue,
-        uint96 targetAssetValue
+        LiquidityOrder calldata order, // the order to be filled
+        uint256 outAmount, // the output amount of the order (that is: mlp output amount for adding and asset output amount for removing)
+        uint96 assetPrice, // the price of asset used in add / remove liquidity
+        uint96 mlpPrice, // the price of mlp
+        uint96 currentAssetValue, // the param used to calculate fee for liquidity
+        uint96 targetAssetValue // the param used to calculate fee for liquidity
     ) external;
 
-    function afterCancelLiquidityOrder(LiquidityOrder calldata order) external;
+    function afterCancelLiquidityOrder(LiquidityOrder calldata order) external; // the order to be filled
 }

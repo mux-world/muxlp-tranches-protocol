@@ -56,10 +56,6 @@ contract JuniorConfig {
         return juniorVault.getConfig(MUX_LIQUIDITY_POOL).toAddress();
     }
 
-    function liquidationLeverage() public view virtual returns (uint256) {
-        return juniorVault.getConfig(LIQUIDATION_LEVERAGE).toUint256();
-    }
-
     function setMuxRewardRouter(address muxRewardRouter_) public virtual onlyAdmin {
         IMuxRewardRouter router = IMuxRewardRouter(muxRewardRouter_);
         juniorVault.setConfig(MUX_REWARD_ROUTER, muxRewardRouter_.toBytes32());
@@ -72,9 +68,5 @@ contract JuniorConfig {
 
     function setMuxLiquidityPool(address muxLiquidityPool_) public virtual onlyAdmin {
         juniorVault.setConfig(MUX_LIQUIDITY_POOL, muxLiquidityPool_.toBytes32());
-    }
-
-    function setLiquidationLeverage(uint256 liquidationLeverage_) public virtual onlyAdmin {
-        juniorVault.setConfig(LIQUIDATION_LEVERAGE, liquidationLeverage_.toBytes32());
     }
 }

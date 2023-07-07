@@ -57,6 +57,16 @@ The RewardDistributor distributes rewards to the shareholders of JuniorVault and
 
 The distribution strategy currently employed involves proportionally allocating rewards to both JuniorVault and SeniorVault. However, there is a priority placed on safeguarding the minimum annualized yield for SeniorVault based on its utilization rate. If the yield falls below this threshold, SeniorVault receives all rewards until the minimum yield is met.
 
+## Callbacks
+
+The withdraw method depends on callbacks to determine the asset price.
+
+The callback interface can be found under 'contracts/interfaces/mux/IMuxLiquidityCallback.sol'
+
+Currently, callbacks are authorized by a whitelist. Third-party contracts that utilize callbacks need to be reviewed by the development team before being added to the whitelist.
+
+Contact us for testing and intergration.
+
 ## Compile && Test
 
 ```
