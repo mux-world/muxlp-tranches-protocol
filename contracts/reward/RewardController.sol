@@ -61,17 +61,18 @@ contract RewardController is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         isHandler[handler_] = enable_;
     }
 
-    function setMinStableApy(uint32 newMinApy) external onlyOwner {
-        require(newMinApy <= maxSeniorApy, "RewardController::INVALID_APY");
+    function setMinStableApy(uint256 newMinApy) external onlyOwner {
+        require(newMinApy <= ONE, "RewardController::INVALID_APY");
         minSeniorApy = newMinApy;
     }
 
-    function setMaxStableApy(uint32 newMaxApy) external onlyOwner {
-        require(newMaxApy >= minSeniorApy, "RewardController::INVALID_APY");
+    function setMaxStableApy(uint256 newMaxApy) external onlyOwner {
+        require(newMaxApy <= ONE, "RewardController::INVALID_APY");
+        require(newMaxApy >= minSeniorApy || newMaxApy == 0, "RewardController::INVALID_APY");
         maxSeniorApy = newMaxApy;
     }
 
-    function setSeniorRewardRate(uint32 newRation) external onlyOwner {
+    function setSeniorRewardRate(uint256 newRation) external onlyOwner {
         seniorRewardRate = newRation;
     }
 
