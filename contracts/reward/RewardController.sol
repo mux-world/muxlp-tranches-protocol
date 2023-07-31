@@ -35,6 +35,11 @@ contract RewardController is OwnableUpgradeable, ReentrancyGuardUpgradeable {
     mapping(address => bool) public isHandler;
 
     event DistributeReward(address indexed receiver, uint256 amount, uint256 timespan);
+    event SetHandler(address indexed handler, bool enable);
+    event SetMinStableApy(uint256 prevMinApy, uint256 newMinApy);
+    event SetMaxStableApy(uint256 prevMaxApy, uint256 newMaxApy);
+    event SetSeniorRewardRate(uint256 prevRation, uint256 newRation);
+    event SetInitialTime(uint256 prevTime, uint256 newTime);
 
     modifier onlyHandler() {
         require(isHandler[msg.sender], "RewardController::HANDLER_ONLY");
@@ -59,20 +64,24 @@ contract RewardController is OwnableUpgradeable, ReentrancyGuardUpgradeable {
 
     function setHandler(address handler_, bool enable_) external onlyOwner {
         isHandler[handler_] = enable_;
+        emit SetHandler(handler_, enable_);
     }
 
     function setMinStableApy(uint256 newMinApy) external onlyOwner {
         require(newMinApy <= ONE, "RewardController::INVALID_APY");
+        emit SetMinStableApy(minSeniorApy, newMinApy);
         minSeniorApy = newMinApy;
     }
 
     function setMaxStableApy(uint256 newMaxApy) external onlyOwner {
         require(newMaxApy <= ONE, "RewardController::INVALID_APY");
         require(newMaxApy >= minSeniorApy || newMaxApy == 0, "RewardController::INVALID_APY");
+        emit SetMaxStableApy(maxSeniorApy, newMaxApy);
         maxSeniorApy = newMaxApy;
     }
 
     function setSeniorRewardRate(uint256 newRation) external onlyOwner {
+        emit SetSeniorRewardRate(seniorRewardRate, newRation);
         seniorRewardRate = newRation;
     }
 

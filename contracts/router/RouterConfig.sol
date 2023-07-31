@@ -24,6 +24,7 @@ contract RouterConfig {
     }
 
     constructor(address configurable_) {
+        require(configurable_ != address(0), "RouterConfig::INVALID_ADDRESS");
         router = IConfigurable(configurable_);
     }
 

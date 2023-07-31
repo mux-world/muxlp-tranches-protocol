@@ -25,6 +25,7 @@ contract JuniorConfig {
     }
 
     constructor(address configurable_) {
+        require(configurable_ != address(0), "JuniorConfig::INVALID_ADDRESS");
         juniorVault = IConfigurable(configurable_);
     }
 

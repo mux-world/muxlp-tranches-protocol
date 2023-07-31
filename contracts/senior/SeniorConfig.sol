@@ -24,6 +24,7 @@ contract SeniorConfig {
     }
 
     constructor(address configurable_) {
+        require(configurable_ != address(0), "SeniorConfig::INVALID_ADDRESS");
         seniorVault = IConfigurable(configurable_);
     }
 
