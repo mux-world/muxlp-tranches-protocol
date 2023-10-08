@@ -8,35 +8,32 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 
 import "../libraries/LibConfigSet.sol";
 import "../libraries/LibUniswap.sol";
+import "../mux/MuxAdapter.sol";
 
-import "./UtilsImp.sol";
-import "./TicketImp.sol";
-import "./AdapterImp.sol";
+import "./RouterUtilImp.sol";
 import "./Type.sol";
 import "./RouterJuniorImp.sol";
 import "./RouterSeniorImp.sol";
+import "./RouterRebalanceImp.sol";
 import "./RouterRewardImp.sol";
+import "./RouterStatesImp.sol";
 
 library RouterImp {
-    using UtilsImp for RouterStateStore;
-    using TicketImp for RouterStateStore;
-    using AdapterImp for RouterStateStore;
+    using SafeERC20Upgradeable for IERC20Upgradeable;
+    using EnumerableSetUpgradeable for EnumerableSetUpgradeable.AddressSet;
+    using LibConfigSet for ConfigSet;
+    using LibTypeCast for bytes32;
+
+    using MuxAdapter for ConfigSet;
+    using RouterUtilImp for RouterStateStore;
     using RouterJuniorImp for RouterStateStore;
     using RouterSeniorImp for RouterStateStore;
     using RouterRewardImp for RouterStateStore;
-    using LibConfigSet for LibConfigSet.ConfigSet;
-    using LibTypeCast for bytes32;
-    using SafeERC20Upgradeable for IERC20Upgradeable;
-    using EnumerableSetUpgradeable for EnumerableSetUpgradeable.UintSet;
+    using RouterStatesImp for RouterStateStore;
+    using RouterRebalanceImp for RouterStateStore;
 
-    event Rebalance(
-        bool isBalanced_,
-        bool isBorrow,
-        uint256 delta,
-        uint64 ticketId,
-        uint256 assets
-    );
-    event Liquidate(uint256 balance, uint64 ticketId);
+    event Liquidate(uint256 balance);
+    event LiquidateInterrupted();
 
     function initialize(
         RouterStateStore storage store,
@@ -48,19 +45,13 @@ library RouterImp {
         require(juniorVault != address(0), "RouterImp::INVALID_ADDRESS");
         require(rewardController != address(0), "RouterImp::INVALID_ADDRESS");
         // skip 0
-        store.ticket.nextId = 1;
         store.seniorVault = ISeniorVault(seniorVault);
         store.juniorVault = IJuniorVault(juniorVault);
         store.rewardController = IRewardController(rewardController);
     }
 
-    function depositJunior(
-        RouterStateStore storage store,
-        address account,
-        uint256 assets
-    ) public returns (uint256 shares) {
-        require(store.status == RouterStatus.Normal, "RouterImp::STATUS");
-        shares = store.depositJunior(account, assets);
+    function depositJunior(RouterStateStore storage store, address account, uint256 assets) public {
+        store.depositJunior(account, assets);
     }
 
     function withdrawJunior(
@@ -68,17 +59,11 @@ library RouterImp {
         address account,
         uint256 shares
     ) public {
-        require(store.status == RouterStatus.Normal, "RouterImp::STATUS");
         store.withdrawJunior(account, shares);
     }
 
-    function depositSenior(
-        RouterStateStore storage store,
-        address account,
-        uint256 assets
-    ) public returns (uint256 shares) {
-        require(store.status == RouterStatus.Normal, "RouterImp::STATUS");
-        shares = store.depositSenior(account, assets);
+    function depositSenior(RouterStateStore storage store, address account, uint256 assets) public {
+        store.depositSenior(account, assets);
     }
 
     function withdrawSenior(
@@ -87,32 +72,64 @@ library RouterImp {
         uint256 shares,
         bool acceptPenalty
     ) public {
-        require(store.status == RouterStatus.Normal, "RouterImp::STATUS");
         store.withdrawSenior(account, shares, acceptPenalty);
     }
 
-    // =============================================== Liquidate ===============================================
+    function refundJunior(RouterStateStore storage store) public {
+        store.refundJunior(store.pendingRefundAssets);
+    }
+
+    // =============================================== Rebalance ===============================================
+    function juniorNavPerShare(
+        RouterStateStore storage store,
+        uint256 seniorPrice,
+        uint256 juniorPrice
+    ) internal view returns (uint256) {
+        uint256 juniorTotalShares = store.juniorTotalSupply();
+        uint256 juniorTotalValues = store.juniorTotalAssets() * juniorPrice;
+        uint256 juniorTotalBorrows = store.toJuniorUnit(
+            store.seniorVault.borrows(address(this)) - store.pendingBorrowAssets
+        ) * seniorPrice;
+
+        // console.log("juniorNavPerShare");
+        // console.log("----------------------------------------------");
+        // console.log("juniorTotalSupply", juniorTotalSupply);
+        // console.log("juniorTotalValue", juniorTotalValue);
+        // console.log("juniorTotalBorrowed", juniorTotalBorrowed);
+        // console.log("----------------------------------------------");
+
+        if (juniorTotalValues > juniorTotalBorrows) {
+            return (juniorTotalValues - juniorTotalBorrows) / juniorTotalShares;
+        } else {
+            return 0;
+        }
+    }
+
     function juniorLeverage(
         RouterStateStore storage store,
         uint256 seniorPrice,
         uint256 juniorPrice
-    ) public view returns (uint256 leverage) {
+    ) internal view returns (uint256 leverage) {
         require(juniorPrice != 0, "RouterImp::INVALID_PRICE");
         require(seniorPrice != 0, "RouterImp::INVALID_PRICE");
-        uint256 totalBorrows = store.seniorBorrows();
-        if (totalBorrows == 0) {
+        uint256 juniorTotalBorrows = store.toJuniorUnit(
+            store.seniorVault.borrows(address(this)) - store.pendingBorrowAssets
+        ) * seniorPrice;
+        if (juniorTotalBorrows == 0) {
             return ONE;
         }
-        uint256 asset = store.juniorVault.totalAssets();
-        uint256 debtAsset = (store.toJuniorUnit(totalBorrows) * seniorPrice) / juniorPrice;
-        if (asset <= debtAsset) {
+        uint256 juniorTotalValue = store.juniorTotalAssets() * juniorPrice;
+        if (juniorTotalValue <= juniorTotalBorrows) {
             return type(uint256).max; // should be liquidated
         }
-        uint256 principle = asset - debtAsset;
-        return (asset * ONE) / principle;
+        uint256 principle = juniorTotalValue - juniorTotalBorrows;
+        return juniorTotalValue / (principle / ONE);
     }
 
-    // =============================================== Rebalance ===============================================
+    function isRebalancing(RouterStateStore storage store) internal view returns (bool) {
+        return store.isRebalancing();
+    }
+
     function isJuniorBalanced(
         RouterStateStore storage store,
         uint256 seniorPrice,
@@ -121,8 +138,10 @@ library RouterImp {
         uint256 targetLeverage = store.config.getUint256(TARGET_LEVERAGE);
         require(targetLeverage > ONE, "RouterImp::INVALID_LEVERAGE");
         uint256 threshold = store.config.getUint256(REBALANCE_THRESHOLD);
-        uint256 assetUsd = (store.juniorVault.totalAssets() * juniorPrice) / ONE;
-        uint256 borrowUsd = (store.toJuniorUnit(store.seniorBorrows()) * seniorPrice) / ONE;
+        uint256 assetUsd = (store.juniorTotalAssets() * juniorPrice) / ONE;
+        uint256 borrowUsd = (store.toJuniorUnit(
+            store.seniorVault.borrows(address(this)) - store.pendingBorrowAssets
+        ) * seniorPrice) / ONE;
         if (assetUsd > borrowUsd) {
             uint256 principleUsd = assetUsd - borrowUsd;
             uint256 targetBorrowUsd = (principleUsd * (targetLeverage - ONE)) / ONE;
@@ -140,7 +159,6 @@ library RouterImp {
 
     function updateRewards(RouterStateStore storage store) public {
         store.updateRewards(address(0));
-        store.juniorVault.adjustVesting();
     }
 
     function rebalance(
@@ -148,45 +166,24 @@ library RouterImp {
         uint256 seniorPrice,
         uint256 juniorPrice
     ) public {
-        require(store.status == RouterStatus.Normal, "RouterImp::STATUS");
-        (bool isBalanced_, bool isBorrow, uint256 delta) = isJuniorBalanced(
+        require(!store.isRebalancing(), "RouterImp::INPROGRESS");
+        (bool isBalanced, bool isBorrow, uint256 delta) = isJuniorBalanced(
             store,
             seniorPrice,
             juniorPrice
         );
-        require(!isBalanced_, "RouterImp::BALANCED");
+        require(!isBalanced, "RouterImp::BALANCED");
+        require(store.config.checkMlpPriceBound(juniorPrice), "RouterImp::PRICE_OUT_OF_BOUNDS");
         // decimal 18 => decimals of senior asset
         if (isBorrow) {
             uint256 borrowable = store.seniorVault.borrowable(address(this));
-            delta = MathUpgradeable.min(borrowable, delta);
-            store.seniorVault.borrow(delta);
-            Ticket storage ticket = store.createTicket(
-                Action.DepositJunior,
-                abi.encode(DepositJuniorParams({assets: delta}))
-            );
-            uint64 orderId = store.placeAddOrder(delta);
-            store.updateTicket(ticket, orderId, Status.Pending);
-            emit Rebalance(isBalanced_, isBorrow, delta, ticket.id, 0);
+            uint256 toBorrow = MathUpgradeable.min(borrowable, delta);
+            store.buyJunior(toBorrow);
         } else {
-            uint256 assets = store.estimateMaxIn(delta);
-            Ticket storage ticket = store.createTicket(
-                Action.WithdrawSenior,
-                abi.encode(
-                    SeniorWithdrawParams({
-                        caller: address(0),
-                        account: address(0),
-                        shares: 0,
-                        removals: assets,
-                        minRepayments: delta
-                    })
-                )
-            );
-            store.juniorVault.transferOut(assets);
-            uint64 orderId = store.placeRemoveOrder(assets);
-            store.updateTicket(ticket, orderId, Status.Pending);
-            emit Rebalance(isBalanced_, isBorrow, delta, ticket.id, assets);
+            // to wad
+            uint256 assets = store.config.estimateMaxIn(delta);
+            store.sellJunior(assets);
         }
-        store.status = RouterStatus.Rebalance;
     }
 
     function liquidate(
@@ -194,109 +191,116 @@ library RouterImp {
         uint256 seniorPrice,
         uint256 juniorPrice
     ) public {
-        require(store.status == RouterStatus.Normal, "RouterImp::STATUS");
+        require(store.config.checkMlpPriceBound(juniorPrice), "RouterImp::PRICE_OUT_OF_BOUNDS");
         uint256 leverage = juniorLeverage(store, seniorPrice, juniorPrice);
         uint256 maxLeverage = store.config.getUint256(LIQUIDATION_LEVERAGE);
         require(leverage > maxLeverage, "RouterImp::NOT_LIQUIDATABLE");
-        cancelAllTickets(store);
-        uint256 totalBalance = store.juniorVault.totalAssets();
-        Ticket storage ticket = store.createTicket(
-            Action.WithdrawSenior,
-            abi.encode(
-                SeniorWithdrawParams({
-                    caller: address(0),
-                    account: address(0),
-                    shares: 0,
-                    removals: totalBalance,
-                    minRepayments: 0
-                })
-            )
-        );
-        store.juniorVault.transferOut(totalBalance);
-        uint64 orderId = store.placeRemoveOrder(totalBalance);
-        store.updateTicket(ticket, orderId, Status.Pending);
-        store.status = RouterStatus.Liquidation;
-
-        emit Liquidate(totalBalance, ticket.id);
+        if (cancelAllPendingOperations(store)) {
+            store.isLiquidated = true;
+            uint256 totalBalance = store.juniorVault.totalAssets();
+            store.sellJunior(totalBalance);
+            emit Liquidate(totalBalance);
+        } else {
+            emit LiquidateInterrupted();
+        }
     }
 
     // =============================================== Callbacks ===============================================
-    function handleTicket(RouterStateStore storage store, uint64 ticketId) public {
-        Ticket storage ticket = store.getTicket(ticketId);
-        if (ticket.action == Action.DepositJunior) {
-            store.handleDepositJunior(ticket);
-        } else if (ticket.action == Action.WithdrawJunior) {
-            store.handleWithdrawJunior(ticket);
-        } else if (ticket.action == Action.WithdrawSenior) {
-            store.handleWithdrawSenior(ticket);
-        } else {
-            revert("ImpRouter::INVALID_ACTION");
-        }
-    }
-
-    function beforeOrderFilled(
-        RouterStateStore storage store,
-        MuxOrderContext memory context
-    ) public view returns (bool) {
-        Ticket storage ticket = store.getTicketByOrderId(context.orderId);
-        if (ticket.action == Action.WithdrawJunior) {
-            return store.beforeWithdrawJunior(context, ticket);
-        } else if (ticket.action == Action.WithdrawSenior) {
-            return store.beforeWithdrawSenior(context, ticket);
-        }
-        return true;
-    }
-
     function onOrderFilled(
         RouterStateStore storage store,
         MuxOrderContext memory context,
         uint256 amountOut
     ) public {
-        Ticket storage ticket = store.getTicketByOrderId(context.orderId);
-        if (ticket.action == Action.DepositJunior) {
-            store.onDepositJuniorSuccess(context, ticket, amountOut);
-        } else if (ticket.action == Action.WithdrawJunior) {
-            store.onWithdrawJuniorSuccess(context, ticket, amountOut);
-        } else if (ticket.action == Action.WithdrawSenior) {
-            store.onWithdrawSeniorSuccess(context, ticket, amountOut);
+        address account = store.pendingOrders[context.orderId];
+        UserState storage state = store.users[account];
+        if (state.status == UserStatus.DepositJunior) {
+            store.onDepositJuniorSuccess(context, account, amountOut);
+        } else if (state.status == UserStatus.WithdrawJunior) {
+            store.onWithdrawJuniorSuccess(context, account, amountOut);
+        } else if (state.status == UserStatus.WithdrawSenior) {
+            store.onWithdrawSeniorSuccess(context, account, amountOut);
+        } else if (state.status == UserStatus.BuyJunior) {
+            store.onBuyJuniorSuccess(context, amountOut);
+        } else if (state.status == UserStatus.SellJunior) {
+            store.onSellJuniorSuccess(context, amountOut);
+        } else if (state.status == UserStatus.RefundJunior) {
+            store.onRefundJuniorSuccess(context, amountOut);
         } else {
-            revert("InvalidOperation");
+            revert("ImpRouter::INVALID_STATUS");
         }
-        store.removeTicket(ticket);
     }
 
     function onOrderCancelled(RouterStateStore storage store, uint64 orderId) public {
-        Ticket storage ticket = store.getTicketByOrderId(orderId);
-        if (ticket.action == Action.WithdrawJunior) {
-            store.onWithdrawJuniorFailed(ticket);
-        } else if (ticket.action == Action.WithdrawSenior) {
-            store.onWithdrawSeniorFailed(ticket);
-        }
-        store.updateTicket(ticket, 0, Status.Failed);
+        address account = store.pendingOrders[orderId];
+        cancelPendingStates(store, account);
     }
 
-    function getTicketCount(RouterStateStore storage store) internal view returns (uint256) {
-        return store.ticket.ticketIds.length();
+    function getPendingUserCount(RouterStateStore storage store) internal view returns (uint256) {
+        return store.pendingUsers.length();
     }
 
-    function getTickets(
+    function getPendingUsers(
         RouterStateStore storage store,
         uint256 begin,
         uint256 count
-    ) internal view returns (Ticket[] memory tickets) {
-        count = MathUpgradeable.min(count, getTicketCount(store) - begin);
-        tickets = new Ticket[](count);
+    ) internal view returns (address[] memory users) {
+        count = MathUpgradeable.min(count, store.pendingUsers.length() - begin);
+        users = new address[](count);
         for (uint256 i = 0; i < count; i++) {
-            tickets[i] = store.ticket.tickets[uint64(store.ticket.ticketIds.at(i + begin))];
+            users[i] = store.pendingUsers.at(i + begin);
         }
     }
 
-    function cancelAllTickets(RouterStateStore storage store) internal {
-        uint256 length = store.ticket.ticketIds.length();
-        for (uint256 i = 0; i < length; i++) {
-            Ticket storage ticket = store.ticket.tickets[uint64(store.ticket.ticketIds.at(i))];
-            store.cancelOrder(ticket.orderId);
-            store.removeTicket(ticket);
+    function getUserOrderTime(
+        RouterStateStore storage store,
+        uint64 orderId
+    ) external view returns (uint32 placeOrderTime) {
+        return store.config.getPlaceOrderTime(orderId);
+    }
+
+    function cancelAllPendingOperations(RouterStateStore storage store) internal returns (bool) {
+        uint256 count = getPendingUserCount(store);
+        uint64[] memory orderIds = new uint64[](count);
+        for (uint256 i = 0; i < count; i++) {
+            orderIds[i] = store.users[store.pendingUsers.at(i)].orderId;
+        }
+        for (uint256 i = 0; i < orderIds.length; i++) {
+            if (orderIds[i] != 0) {
+                bool success = store.config.cancelOrder(orderIds[i]);
+                if (!success) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    function cancelPendingOperation(RouterStateStore storage store, address account) internal {
+        UserState memory userState = store.users[msg.sender];
+        require(userState.status != UserStatus.Idle, "RouterV1::INPROPER_STATUS");
+        if (userState.orderId != 0) {
+            store.config.cancelOrder(userState.orderId);
+        } else {
+            cancelPendingStates(store, account);
+        }
+    }
+
+    function cancelPendingStates(RouterStateStore storage store, address account) internal {
+        UserState storage state = store.users[account];
+        if (state.status == UserStatus.DepositJunior) {
+            store.onDepositJuniorFailed(account);
+        } else if (state.status == UserStatus.WithdrawJunior) {
+            store.onWithdrawJuniorFailed(account);
+        } else if (state.status == UserStatus.WithdrawSenior) {
+            store.onWithdrawSeniorFailed(account);
+        } else if (state.status == UserStatus.BuyJunior) {
+            store.onBuyJuniorFailed();
+        } else if (state.status == UserStatus.SellJunior) {
+            store.onSellJuniorFailed();
+        } else if (state.status == UserStatus.RefundJunior) {
+            store.onRefundJuniorFailed();
+        } else {
+            revert("ImpRouter::INVALID_STATUS");
         }
     }
 }

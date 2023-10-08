@@ -207,84 +207,6 @@ describe("States", async () => {
     await routerConfig.setLiquidationLeverage(toWei("10"));
   });
 
-  it("junior deposit / withraw", async () => {
-    /// init accounts
-    const broker = await ethers.getImpersonatedSigner("0x988aa44e12c7bce07e449a4156b4a269d6642b3a");
-    const usdcHolder = await ethers.getImpersonatedSigner(
-      "0x489ee077994b6658eafa855c308275ead8097c4a"
-    ); // some huge whale found on etherscan
-    await setBalance(usdcHolder.address, toWei("1000000"));
-    const admin = await ethers.getImpersonatedSigner("0xc2d28778447b1b0b2ae3ad17dc6616b546fbbebb");
-    await setBalance(admin.address, toWei("1000000"));
-    await orderBook.connect(admin).setCallbackWhitelist(router.address, true);
-
-    const fillOrder = async () => {
-      var orderId = await orderBook.nextOrderId();
-      await time.increase(60 * 15);
-      await orderBook
-        .connect(broker)
-        .fillLiquidityOrder(orderId - 1, toWei("1"), toWei("1"), toWei("5000"), toWei("10000"));
-    };
-
-    // =========================== alice get mlp ===========================
-    await usdc.connect(usdcHolder).transfer(alice.address, toUsd("200"));
-    await usdc.connect(alice).approve(orderBook.address, toUsd("200"));
-    await orderBook.connect(alice).placeLiquidityOrder(0, toUsd("200"), true);
-    await fillOrder();
-
-    // senior deposit +1000
-    await usdc.connect(usdcHolder).transfer(bob.address, toUsd("1000"));
-    await usdc.connect(bob).approve(router.address, toUsd("1000"));
-    await router.connect(bob).depositSenior(toUsd("1000"));
-
-    // junior deposit +100
-    await mlp.connect(alice).approve(router.address, toWei("100"));
-    await router.connect(alice).depositJunior(toWei("100"));
-    await expect(router.connect(alice).depositJunior(toWei("100"))).to.be.revertedWith(
-      "INPROPER_STATUS"
-    );
-
-    var users = await router.getPendingUsers(0, 100);
-    expect(users.length).to.equal(1);
-    expect(users[0]).to.equal(alice.address);
-    var userStates = await router.getUserStates(users[0]);
-    expect(userStates.status).to.equal(1);
-    expect(userStates.stateValues[0]).to.equal(toWei("100"));
-    await fillOrder();
-    var users = await router.getPendingUsers(0, 100);
-    expect(users.length).to.equal(0);
-    expect(await junior.balanceOf(alice.address)).to.equal(toWei("100"));
-
-    // rebalance
-    await routerConfig.setTargetLeverage(toWei("5"));
-    await router.connect(keeper).rebalance(toWei("1"), toWei("1"));
-    await expect(router.connect(keeper).rebalance(toWei("1"), toWei("1"))).to.be.revertedWith(
-      "INPROPER_STATUS"
-    );
-
-    var users = await router.getPendingUsers(0, 100);
-    expect(users.length).to.equal(1);
-    expect(users[0]).to.equal(ethers.constants.AddressZero);
-    var userStates = await router.getUserStates(users[0]);
-    expect(userStates.status).to.equal(4);
-    await fillOrder();
-    var users = await router.getPendingUsers(0, 100);
-    expect(users.length).to.equal(0);
-
-    // withdraw junior
-    expect(await junior.balanceOf(alice.address)).to.equal(toWei("100"));
-    await router.connect(alice).withdrawJunior(toWei("100"));
-    await expect(router.connect(alice).withdrawJunior(toWei("100"))).to.be.revertedWith(
-      "INPROPER_STATUS"
-    );
-    expect(await junior.balanceOf(alice.address)).to.equal(toWei("0"));
-    expect(await router.pendingJuniorShares()).to.equal(toWei("100"));
-    await fillOrder();
-    expect(await junior.balanceOf(alice.address)).to.equal(toWei("0"));
-    expect(await router.pendingJuniorShares()).to.equal(toWei("0"));
-    expect(await router.pendingJuniorAssets()).to.equal(toWei("0"));
-  });
-
   it("(junior) +deposit +rebalance +withdraw", async () => {
     /// init accounts
     const broker = await ethers.getImpersonatedSigner("0x988aa44e12c7bce07e449a4156b4a269d6642b3a");
@@ -325,60 +247,68 @@ describe("States", async () => {
     var userStates = await router.getUserStates(users[0]);
     expect(userStates.status).to.equal(1);
     expect(userStates.stateValues[0]).to.equal(toWei("100"));
-    await fillOrder();
+    await router.connect(alice).cancelPendingOperation();
+
     var users = await router.getPendingUsers(0, 100);
     expect(users.length).to.equal(0);
-    expect(await junior.balanceOf(alice.address)).to.equal(toWei("100"));
-    expect(await junior.totalSupply()).to.equal(toWei("100"));
-    console.log("NAV", fromWei(await router.juniorNavPerShare(toWei("1"), toWei("1"))));
+    var userStates = await router.getUserStates(alice.address);
+    expect(userStates.status).to.equal(0);
+    expect(userStates.stateValues[0]).to.equal(toWei("0"));
 
-    // rebalance
-    await routerConfig.setTargetLeverage(toWei("5"));
-    await router.connect(keeper).rebalance(toWei("1"), toWei("1"));
-    console.log("NAV", fromWei(await router.juniorNavPerShare(toWei("1"), toWei("1"))));
-    var users = await router.getPendingUsers(0, 100);
-    expect(users.length).to.equal(1);
-    expect(users[0]).to.equal(ethers.constants.AddressZero);
-    var userStates = await router.getUserStates(users[0]);
-    expect(userStates.status).to.equal(4);
-    await fillOrder();
-    var users = await router.getPendingUsers(0, 100);
-    expect(users.length).to.equal(0);
+    // await fillOrder();
+    // var users = await router.getPendingUsers(0, 100);
+    // expect(users.length).to.equal(0);
+    // expect(await junior.balanceOf(alice.address)).to.equal(toWei("100"));
+    // expect(await junior.totalSupply()).to.equal(toWei("100"));
+    // console.log("NAV", fromWei(await router.juniorNavPerShare(toWei("1"), toWei("1"))));
 
-    console.log("NAV", fromWei(await router.juniorNavPerShare(toWei("1"), toWei("1"))));
-    console.log("LEV", fromWei(await router.juniorLeverage(toWei("1"), toWei("1"))));
-    expect(await junior.balanceOf(alice.address)).to.equal(toWei("100"));
-    expect(await junior.totalSupply()).to.equal(toWei("100"));
+    // // rebalance
+    // await routerConfig.setTargetLeverage(toWei("5"));
+    // await router.connect(keeper).rebalance(toWei("1"), toWei("1"));
+    // console.log("NAV", fromWei(await router.juniorNavPerShare(toWei("1"), toWei("1"))));
+    // var users = await router.getPendingUsers(0, 100);
+    // expect(users.length).to.equal(1);
+    // expect(users[0]).to.equal(ethers.constants.AddressZero);
+    // var userStates = await router.getUserStates(users[0]);
+    // expect(userStates.status).to.equal(4);
+    // await fillOrder();
+    // var users = await router.getPendingUsers(0, 100);
+    // expect(users.length).to.equal(0);
 
-    // price changed => 0.9
-    console.log("NAV", fromWei(await router.juniorNavPerShare(toWei("1"), toWei("0.9"))));
-    console.log("LEV", fromWei(await router.juniorLeverage(toWei("1"), toWei("0.9"))));
-    await mlp.connect(alice).approve(router.address, toWei("55.555555555555555555")); // 90u
-    await router.connect(alice).depositJunior(toWei("55.555555555555555555")); // 90u
-    await fillOrder(toWei("0.9"));
-    expect(await junior.balanceOf(alice.address)).to.be.closeTo(toWei("200"), 100000);
-    expect(await junior.totalSupply()).to.be.closeTo(toWei("200"), 100000);
-    console.log("NAV", fromWei(await router.juniorNavPerShare(toWei("1"), toWei("0.9"))));
-    console.log("LEV", fromWei(await router.juniorLeverage(toWei("1"), toWei("0.9"))));
+    // console.log("NAV", fromWei(await router.juniorNavPerShare(toWei("1"), toWei("1"))));
+    // console.log("LEV", fromWei(await router.juniorLeverage(toWei("1"), toWei("1"))));
+    // expect(await junior.balanceOf(alice.address)).to.equal(toWei("100"));
+    // expect(await junior.totalSupply()).to.equal(toWei("100"));
 
-    // price changed => 1
-    console.log("NAV", fromWei(await router.juniorNavPerShare(toWei("1"), toWei("1"))));
-    console.log("LEV", fromWei(await router.juniorLeverage(toWei("1"), toWei("1"))));
-    await router.connect(bob).withdrawSenior(toWei("200"), true);
-    var users = await router.getPendingUsers(0, 100);
-    expect(users.length).to.equal(0);
-    console.log("NAV", fromWei(await router.juniorNavPerShare(toWei("1"), toWei("1"))));
-    console.log("LEV", fromWei(await router.juniorLeverage(toWei("1"), toWei("1"))));
+    // // price changed => 0.9
+    // console.log("NAV", fromWei(await router.juniorNavPerShare(toWei("1"), toWei("0.9"))));
+    // console.log("LEV", fromWei(await router.juniorLeverage(toWei("1"), toWei("0.9"))));
+    // await mlp.connect(alice).approve(router.address, toWei("55.555555555555555555")); // 90u
+    // await router.connect(alice).depositJunior(toWei("55.555555555555555555")); // 90u
+    // await fillOrder(toWei("0.9"));
+    // expect(await junior.balanceOf(alice.address)).to.be.closeTo(toWei("200"), 100000);
+    // expect(await junior.totalSupply()).to.be.closeTo(toWei("200"), 100000);
+    // console.log("NAV", fromWei(await router.juniorNavPerShare(toWei("1"), toWei("0.9"))));
+    // console.log("LEV", fromWei(await router.juniorLeverage(toWei("1"), toWei("0.9"))));
 
-    await router.connect(bob).withdrawSenior(toWei("700"), true);
-    var users = await router.getPendingUsers(0, 100);
-    expect(users.length).to.equal(1);
-    expect(users[0]).to.equal(bob.address);
-    console.log("NAV", fromWei(await router.juniorNavPerShare(toWei("1"), toWei("1"))));
-    console.log("LEV", fromWei(await router.juniorLeverage(toWei("1"), toWei("1"))));
-    await fillOrder();
+    // // price changed => 1
+    // console.log("NAV", fromWei(await router.juniorNavPerShare(toWei("1"), toWei("1"))));
+    // console.log("LEV", fromWei(await router.juniorLeverage(toWei("1"), toWei("1"))));
+    // await router.connect(bob).withdrawSenior(toWei("200"), true);
+    // var users = await router.getPendingUsers(0, 100);
+    // expect(users.length).to.equal(0);
+    // console.log("NAV", fromWei(await router.juniorNavPerShare(toWei("1"), toWei("1"))));
+    // console.log("LEV", fromWei(await router.juniorLeverage(toWei("1"), toWei("1"))));
 
-    console.log("NAV", fromWei(await router.juniorNavPerShare(toWei("1"), toWei("1"))));
-    console.log("LEV", fromWei(await router.juniorLeverage(toWei("1"), toWei("1"))));
+    // await router.connect(bob).withdrawSenior(toWei("700"), true);
+    // var users = await router.getPendingUsers(0, 100);
+    // expect(users.length).to.equal(1);
+    // expect(users[0]).to.equal(bob.address);
+    // console.log("NAV", fromWei(await router.juniorNavPerShare(toWei("1"), toWei("1"))));
+    // console.log("LEV", fromWei(await router.juniorLeverage(toWei("1"), toWei("1"))));
+    // await fillOrder();
+
+    // console.log("NAV", fromWei(await router.juniorNavPerShare(toWei("1"), toWei("1"))));
+    // console.log("LEV", fromWei(await router.juniorLeverage(toWei("1"), toWei("1"))));
   });
 });

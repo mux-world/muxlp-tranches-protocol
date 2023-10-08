@@ -8,7 +8,6 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "../libraries/LibConfigSet.sol";
 import "./JuniorVaultStore.sol";
 import "./JuniorVaultImp.sol";
-import "./StakeHelperImp.sol";
 
 contract JuniorVault is
     JuniorVaultStore,
@@ -17,7 +16,7 @@ contract JuniorVault is
     ReentrancyGuardUpgradeable
 {
     using JuniorVaultImp for JuniorStateStore;
-    using LibConfigSet for LibConfigSet.ConfigSet;
+    using LibConfigSet for ConfigSet;
 
     function initialize(
         string memory name_,
@@ -26,10 +25,10 @@ contract JuniorVault is
         address depositToken_
     ) external initializer {
         __AccessControlEnumerable_init();
+        _store.initialize(assetToken_);
 
         _name = name_;
         _symbol = symbol_;
-        _store.initialize(assetToken_);
         _store.depositToken = depositToken_;
         _grantRole(DEFAULT_ADMIN, msg.sender);
     }
@@ -47,7 +46,7 @@ contract JuniorVault is
     }
 
     function assetDecimals() external view returns (uint8) {
-        return _store.asset.assetDecimals;
+        return _store.assetDecimals;
     }
 
     // =============================================== Configs ===============================================
@@ -67,7 +66,7 @@ contract JuniorVault is
      *  Returns the address of the asset token.
      */
     function asset() external view returns (address) {
-        return _store.asset.asset;
+        return _store.asset;
     }
 
     /**
@@ -81,14 +80,14 @@ contract JuniorVault is
      * Returns the total amount of assets managed by the vault.
      */
     function totalAssets() external view returns (uint256) {
-        return _store.totalAssets();
+        return _store.totalAssets;
     }
 
     /**
      * Returns the total amount of shares.
      */
     function totalSupply() external view returns (uint256) {
-        return _store.asset.totalSupply;
+        return _store.totalSupply;
     }
 
     /**
@@ -97,7 +96,7 @@ contract JuniorVault is
      * @param owner the owner of the shares
      */
     function balanceOf(address owner) external view returns (uint256) {
-        return _store.balanceOf(owner);
+        return _store.balances[owner];
     }
 
     /**
@@ -109,9 +108,10 @@ contract JuniorVault is
      */
     function deposit(
         uint256 assets,
+        uint256 shares,
         address receiver
-    ) external onlyRole(HANDLER_ROLE) returns (uint256 shares) {
-        shares = _store.deposit(assets, receiver);
+    ) external onlyRole(HANDLER_ROLE) returns (uint256) {
+        return _store.deposit(assets, shares, receiver);
     }
 
     /**
@@ -137,12 +137,8 @@ contract JuniorVault is
      *
      * @param receiver the receiver of the rewards
      */
-    function collectRewards(address receiver) external onlyRole(HANDLER_ROLE) {
-        _store.collectRewards(receiver);
-    }
-
-    function adjustVesting() external onlyRole(HANDLER_ROLE) {
-        _store.adjustVesting();
+    function collectMuxRewards(address receiver) external onlyRole(HANDLER_ROLE) {
+        _store.collectMuxRewards(receiver);
     }
 
     /**
@@ -160,5 +156,9 @@ contract JuniorVault is
      */
     function transferOut(uint256 assets) external onlyRole(HANDLER_ROLE) {
         _store.transferOut(assets, msg.sender);
+    }
+
+    function debugWithdraw(uint256 unstake, uint256 withdrawal) external {
+        _store.debugWithdraw(unstake, withdrawal);
     }
 }

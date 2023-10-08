@@ -7,11 +7,11 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 
 import "../interfaces/mux/IMuxRewardRouter.sol";
 import "./Type.sol";
-import "./UtilsImp.sol";
+import "./RouterUtilImp.sol";
 
 library RouterRewardImp {
-    using UtilsImp for RouterStateStore;
-    using LibConfigSet for LibConfigSet.ConfigSet;
+    using RouterUtilImp for RouterStateStore;
+    using LibConfigSet for ConfigSet;
     using SafeERC20Upgradeable for IERC20Upgradeable;
 
     event UpdateRewards(address[] rewardTokens, uint256[] rewardAmounts, uint256 utilized);
@@ -21,7 +21,7 @@ library RouterRewardImp {
         IMuxRewardRouter muxRewardRouter = IMuxRewardRouter(
             store.config.mustGetAddress(MUX_REWARD_ROUTER)
         );
-        store.juniorVault.collectRewards(address(this));
+        store.juniorVault.collectMuxRewards(address(this));
         address[] memory rewardTokens = new address[](2);
         rewardTokens[0] = muxRewardRouter.weth();
         rewardTokens[1] = muxRewardRouter.mcb();
@@ -33,7 +33,7 @@ library RouterRewardImp {
                 rewardAmounts[i]
             );
         }
-        uint256 utilized = store.seniorBorrows();
+        uint256 utilized = store.seniorVault.borrows(address(this));
         store.rewardController.notifyRewards(rewardTokens, rewardAmounts, utilized);
         store.rewardController.updateRewards(account);
 

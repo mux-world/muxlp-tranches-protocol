@@ -3,7 +3,7 @@ pragma solidity 0.8.17;
 
 import "./Type.sol";
 
-library UtilsImp {
+library RouterUtilImp {
     function toJuniorUnit(
         RouterStateStore storage store,
         uint256 seniorUnitAmount
@@ -20,20 +20,5 @@ library UtilsImp {
         seniorUnitAmount =
             juniorUnitAmount /
             (10 ** (store.juniorVault.assetDecimals() - store.seniorVault.assetDecimals()));
-    }
-
-    function seniorWithdrawable(
-        RouterStateStore storage store,
-        address owner
-    ) internal view returns (uint256) {
-        return store.seniorVault.balanceOf(owner) - store.pendingSeniorWithdrawals[owner];
-    }
-
-    function seniorBorrows(RouterStateStore storage store) internal view returns (uint256) {
-        return store.seniorVault.borrows(address(this)) - store.totalPendingSeniorWithdrawal;
-    }
-
-    function seniorTotalAssets(RouterStateStore storage store) internal view returns (uint256) {
-        return store.seniorVault.totalAssets() - store.totalPendingSeniorWithdrawal;
     }
 }

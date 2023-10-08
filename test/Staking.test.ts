@@ -10,11 +10,7 @@ import {
   PreMinedTokenTotalSupply,
 } from "../scripts/deployUtils";
 import {BigNumber} from "ethers";
-import {
-  impersonateAccount,
-  setBalance,
-  time,
-} from "@nomicfoundation/hardhat-network-helpers";
+import {impersonateAccount, setBalance, time} from "@nomicfoundation/hardhat-network-helpers";
 
 const U = ethers.utils;
 const B = ethers.BigNumber;
@@ -74,13 +70,7 @@ describe("SeniorVault", async () => {
     smlp = await createContract("MlpRewardTracker");
     vester = await createContract("Vester");
     await rewardRouter.initialize(
-      [
-        weth.address,
-        mcb.address,
-        mux.address,
-        mlp.address,
-        placeholder.address,
-      ],
+      [weth.address, mcb.address, mux.address, mlp.address, placeholder.address],
       [fmlp.address, smlp.address, placeholder.address, placeholder.address],
       [vester.address, placeholder.address],
       [feeDist.address, muxDist.address]
@@ -112,12 +102,7 @@ describe("SeniorVault", async () => {
       false
     );
     await fmlp.initialize("Fee MLP", "fMLP", [mlp.address], feeDist.address);
-    await smlp.initialize(
-      "Staked MLP",
-      "sMLP",
-      [fmlp.address],
-      muxDist.address
-    );
+    await smlp.initialize("Staked MLP", "sMLP", [fmlp.address], muxDist.address);
 
     await fmlp.setHandler(rewardRouter.address, true);
     await smlp.setHandler(rewardRouter.address, true);
@@ -151,10 +136,7 @@ describe("SeniorVault", async () => {
 
     await junior.initialize("JUNIOR", "JUN", smlp.address, mlp.address);
     await junior.grantRole(ethers.utils.id("HANDLER_ROLE"), user0.address);
-    await junior.grantRole(
-      ethers.utils.id("CONFIG_ROLE"),
-      juniorConfig.address
-    );
+    await junior.grantRole(ethers.utils.id("CONFIG_ROLE"), juniorConfig.address);
     rewardController = await createContract("RewardController");
     seniorReward = await createContract("RewardDistributor");
     juniorReward = await createContract("RewardDistributor");
@@ -162,7 +144,6 @@ describe("SeniorVault", async () => {
 
     await juniorConfig.setMuxRewardRouter(rewardRouter.address);
     await juniorConfig.setMuxLiquidityPool(liquidityPool.address);
-    await juniorConfig.setLiquidationLeverage(toWei("10"));
   });
 
   it("senior deposit / withdraw", async () => {
@@ -175,35 +156,22 @@ describe("SeniorVault", async () => {
     await weth.mint(user0.address, toWei("100"));
     await weth.approve(feeDist.address, toWei("100"));
     await feeDist.notifyReward(toWei("100"));
-    console.log(
-      "-------------------------------------------------------------"
-    );
+    console.log("-------------------------------------------------------------");
 
     await time.setNextBlockTimestamp(1688601600 + 86400 * 7);
     await junior.collectRewards(user1.address);
-    console.log(
-      "-------------------------------------------------------------"
-    );
+    console.log("-------------------------------------------------------------");
 
     await time.setNextBlockTimestamp(1688601600 + 86400 * 7 + 86400);
     await junior.collectRewards(user1.address);
-    console.log(
-      "-------------------------------------------------------------"
-    );
+    console.log("-------------------------------------------------------------");
 
     await time.setNextBlockTimestamp(1688601600 + 86400 * 7 + 86400 * 2);
     await junior.collectRewards(user1.address);
-    await junior.withdraw(
-      alice.address,
-      alice.address,
-      toWei("50"),
-      user1.address
-    );
+    await junior.withdraw(alice.address, alice.address, toWei("50"), user1.address);
 
     await time.setNextBlockTimestamp(1688601600 + 86400 * 7 + 86400 * 7);
-    console.log(
-      "-------------------------------------------------------------"
-    );
+    console.log("-------------------------------------------------------------");
     await junior.collectRewards(user1.address);
   });
 });

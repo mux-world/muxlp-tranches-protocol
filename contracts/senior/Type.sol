@@ -1,30 +1,23 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 pragma solidity 0.8.17;
 
-import "../libraries/LibERC4626.sol";
 import "../libraries/LibConfigSet.sol";
-import "../common/Keys.sol";
-
-uint256 constant ONE = 1e18;
-
-enum LockType {
-    None,
-    SoftLock,
-    HardLock
-}
+import "../libraries/LibDefines.sol";
 
 struct SeniorStateStore {
-    // balance properties
-    ERC4626Store asset;
+    bytes32[50] __offsets;
     // config
-    LibConfigSet.ConfigSet config;
-    // helper properties
+    ConfigSet config;
+    // balance properties
+    address asset;
+    uint8 assetDecimals;
+    uint256 totalAssets;
+    uint256 totalSupply;
     uint256 previousBalance;
-    // total assets borrowed to junior vaults
     uint256 totalBorrows;
     // assets borrowed to junior vaults
     mapping(address => uint256) borrows;
-    // withdraw timelock, depends on the type of lock
+    mapping(address => uint256) balances;
     mapping(address => uint256) timelocks;
     bytes32[20] __reserves;
 }

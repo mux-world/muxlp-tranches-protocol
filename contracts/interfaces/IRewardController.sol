@@ -4,14 +4,13 @@ pragma solidity 0.8.17;
 interface IRewardController {
     function rewardToken() external view returns (address);
 
-    function claimableRewards(
-        address account
-    ) external returns (uint256 seniorRewards, uint256 juniorRewards);
+    function claimableJuniorRewards(address account) external returns (uint256);
 
-    function claimRewardFor(
-        address account,
-        address receiver
-    ) external returns (uint256 seniorRewards, uint256 juniorRewards);
+    function claimableSeniorRewards(address account) external returns (uint256);
+
+    function claimSeniorRewardsFor(address account, address receiver) external returns (uint256);
+
+    function claimJuniorRewardsFor(address account, address receiver) external returns (uint256);
 
     function updateRewards(address account) external;
 

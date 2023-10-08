@@ -25,6 +25,7 @@ contract RewardDistributor is ReentrancyGuardUpgradeable, OwnableUpgradeable {
     mapping(address => uint256) claimableReward;
     mapping(address => uint256) previousCumulatedRewardPerToken;
     mapping(address => bool) public isHandler;
+    mapping(address => uint256) lastClaimTime;
 
     event Claim(address receiver, uint256 amount);
 
@@ -64,6 +65,7 @@ contract RewardDistributor is ReentrancyGuardUpgradeable, OwnableUpgradeable {
         _updateRewards(account);
     }
 
+    // Claim rewards for senior/junior. Should call RouterV1.updateRewards() first to collected all rewards.
     function claim(address _receiver) external nonReentrant returns (uint256) {
         return _claim(msg.sender, _receiver);
     }
@@ -80,6 +82,7 @@ contract RewardDistributor is ReentrancyGuardUpgradeable, OwnableUpgradeable {
         uint256 tokenAmount = claimableReward[account];
         claimableReward[account] = 0;
         if (tokenAmount > 0) {
+            lastClaimTime[account] = block.timestamp;
             lastRewardBalance -= tokenAmount;
             IERC20Upgradeable(rewardToken).safeTransfer(receiver, tokenAmount);
             emit Claim(account, tokenAmount);
@@ -87,6 +90,7 @@ contract RewardDistributor is ReentrancyGuardUpgradeable, OwnableUpgradeable {
         return tokenAmount;
     }
 
+    // Get claimable rewards for senior/junior. Should call RouterV1.updateRewards() first to collected all rewards.
     function claimable(address account) public returns (uint256) {
         _updateRewards(account);
         uint256 balance = balanceOf(account);

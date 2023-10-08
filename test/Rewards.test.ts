@@ -11,17 +11,13 @@ import {
   PreMinedTokenTotalSupply,
 } from "../scripts/deployUtils";
 import {BigNumber} from "ethers";
-import {
-  impersonateAccount,
-  setBalance,
-  time,
-} from "@nomicfoundation/hardhat-network-helpers";
+import {impersonateAccount, setBalance, time} from "@nomicfoundation/hardhat-network-helpers";
 
 const U = ethers.utils;
 const B = ethers.BigNumber;
 const toUsd = (v) => toUnit(v, 6);
 
-describe("Simulate", async () => {
+describe("Rewards", async () => {
   let user0;
   let user1;
   let alice;
@@ -76,8 +72,7 @@ describe("Simulate", async () => {
       params: [
         {
           forking: {
-            jsonRpcUrl:
-              "https://arb1.arbitrum.io/rpc",
+            jsonRpcUrl: "https://arb1.arbitrum.io/rpc",
             enabled: true,
             ignoreUnknownTxType: true, // added in our hardhat patch. see README.md
             blockNumber: 107393108, // modify me if ./cache/hardhat-network-fork was cleared
@@ -86,22 +81,10 @@ describe("Simulate", async () => {
       ],
     });
 
-    usdc = await ethers.getContractAt(
-      "SimpleERC20",
-      "0xFF970A61A04b1cA14834A43f5dE4533eBDDB5CC8"
-    );
-    weth = await ethers.getContractAt(
-      "SimpleERC20",
-      "0x82aF49447D8a07e3bd95BD0d56f35241523fBab1"
-    );
-    mcb = await ethers.getContractAt(
-      "SimpleERC20",
-      "0x4e352cF164E64ADCBad318C3a1e222E9EBa4Ce42"
-    );
-    mux = await ethers.getContractAt(
-      "SimpleERC20",
-      "0x8BB2Ac0DCF1E86550534cEE5E9C8DED4269b679B"
-    );
+    usdc = await ethers.getContractAt("SimpleERC20", "0xFF970A61A04b1cA14834A43f5dE4533eBDDB5CC8");
+    weth = await ethers.getContractAt("SimpleERC20", "0x82aF49447D8a07e3bd95BD0d56f35241523fBab1");
+    mcb = await ethers.getContractAt("SimpleERC20", "0x4e352cF164E64ADCBad318C3a1e222E9EBa4Ce42");
+    mux = await ethers.getContractAt("SimpleERC20", "0x8BB2Ac0DCF1E86550534cEE5E9C8DED4269b679B");
     feeDistributor = await ethers.getContractAt(
       "FeeDistributor",
       "0xeafa499D45d29E0a62541b26730a0162D13BB887"
@@ -114,10 +97,7 @@ describe("Simulate", async () => {
       "RewardRouter",
       "0xaf9C4F6A0ceB02d4217Ff73f3C95BbC8c7320ceE"
     );
-    mlp = await ethers.getContractAt(
-      "SimpleERC20",
-      "0x7CbaF5a14D953fF896E5B3312031515c858737C8"
-    );
+    mlp = await ethers.getContractAt("SimpleERC20", "0x7CbaF5a14D953fF896E5B3312031515c858737C8");
     fmlp = await ethers.getContractAt(
       "MlpRewardTracker",
       "0x290450cDea757c68E4Fe6032ff3886D204292914"
@@ -126,10 +106,7 @@ describe("Simulate", async () => {
       "MlpRewardTracker",
       "0x0a9bbf8299FEd2441009a7Bb44874EE453de8e5D"
     );
-    vester = await ethers.getContractAt(
-      "Vester",
-      "0xBCF8c124975DE6277D8397A3Cad26E2333620226"
-    );
+    vester = await ethers.getContractAt("Vester", "0xBCF8c124975DE6277D8397A3Cad26E2333620226");
 
     liquidityPool = await ethers.getContractAt(
       "IMuxLiquidityPool",
@@ -148,7 +125,11 @@ describe("Simulate", async () => {
       RouterImp: await createContract("RouterImp", [], {
         RouterJuniorImp: await createContract("RouterJuniorImp"),
         RouterSeniorImp: await createContract("RouterSeniorImp"),
+        RouterRebalanceImp: await createContract("RouterRebalanceImp"),
       }),
+      RouterJuniorImp: await createContract("RouterJuniorImp"),
+      RouterSeniorImp: await createContract("RouterSeniorImp"),
+      RouterRebalanceImp: await createContract("RouterRebalanceImp"),
     });
     routerConfig = await createContract("RouterConfig", [router.address]);
 
@@ -158,27 +139,14 @@ describe("Simulate", async () => {
 
     await senior.initialize("SENIOR", "SEN", usdc.address);
     await senior.grantRole(ethers.utils.id("HANDLER_ROLE"), router.address);
-    await senior.grantRole(
-      ethers.utils.id("CONFIG_ROLE"),
-      seniorConfig.address
-    );
+    await senior.grantRole(ethers.utils.id("CONFIG_ROLE"), seniorConfig.address);
 
     await junior.initialize("JUNIOR", "JUN", smlp.address, mlp.address);
     await junior.grantRole(ethers.utils.id("HANDLER_ROLE"), router.address);
-    await junior.grantRole(
-      ethers.utils.id("CONFIG_ROLE"),
-      juniorConfig.address
-    );
+    await junior.grantRole(ethers.utils.id("CONFIG_ROLE"), juniorConfig.address);
 
-    await router.initialize(
-      senior.address,
-      junior.address,
-      rewardController.address
-    );
-    await router.grantRole(
-      ethers.utils.id("CONFIG_ROLE"),
-      routerConfig.address
-    );
+    await router.initialize(senior.address, junior.address, rewardController.address);
+    await router.grantRole(ethers.utils.id("CONFIG_ROLE"), routerConfig.address);
     await router.grantRole(ethers.utils.id("KEEPER_ROLE"), keeper.address);
 
     await seniorReward.initialize("S", "S", usdc.address, senior.address);
@@ -204,18 +172,17 @@ describe("Simulate", async () => {
       "0x4e352cf164e64adcbad318c3a1e222e9eba4ce42000bb882af49447d8a07e3bd95bd0d56f35241523fbab10001f4ff970a61a04b1ca14834a43f5de4533ebddb5cc8",
     ]);
 
-    await seniorConfig.setLockType(1);
     await seniorConfig.setLockPeriod(86400);
     await seniorConfig.setMaxBorrows(toWei("1000"));
 
     await juniorConfig.setMuxRewardRouter(rewardRouter.address);
     await juniorConfig.setMuxLiquidityPool(liquidityPool.address);
-    await juniorConfig.setLiquidationLeverage(toWei("10"));
 
     await routerConfig.setMuxRewardRouter(rewardRouter.address);
     await routerConfig.setMuxOrderBook(orderBook.address);
     await routerConfig.setMuxLiquidityPool(liquidityPool.address);
     await routerConfig.setRebalanceThreshold(toWei("0.05"));
+    await routerConfig.setLiquidationLeverage(toWei("10"));
   });
 
   it("reward", async () => {
@@ -236,12 +203,8 @@ describe("Simulate", async () => {
     ); // some huge whale found on etherscan
     await setBalance(mcbHolder.address, toWei("1000000"));
 
-    await weth
-      .connect(wethHolder)
-      .transfer(rewardController.address, toWei("10"));
-    await mcb
-      .connect(mcbHolder)
-      .transfer(rewardController.address, toWei("100"));
+    await weth.connect(wethHolder).transfer(rewardController.address, toWei("10"));
+    await mcb.connect(mcbHolder).transfer(rewardController.address, toWei("100"));
     await rewardController.notifyRewards(
       [weth.address, mcb.address],
       [toWei("10"), toWei("100")],

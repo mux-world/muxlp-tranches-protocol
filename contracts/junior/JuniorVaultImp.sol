@@ -3,16 +3,16 @@ pragma solidity 0.8.17;
 
 import "@openzeppelin/contracts-upgradeable/token/ERC20/IERC20Upgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC20/utils/SafeERC20Upgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/utils/math/MathUpgradeable.sol";
 
-import "../libraries/LibERC4626.sol";
+import "../mux/MuxAdapter.sol";
 import "./Type.sol";
-import "./StakeHelperImp.sol";
 
 library JuniorVaultImp {
-    using LibERC4626 for ERC4626Store;
-    using StakeHelperImp for JuniorStateStore;
+    using MathUpgradeable for uint256;
     using SafeERC20Upgradeable for IERC20Upgradeable;
-    using LibConfigSet for LibConfigSet.ConfigSet;
+    using LibConfigSet for ConfigSet;
+    using MuxAdapter for ConfigSet;
 
     event Deposit(address indexed owner, uint256 assets, uint256 shares);
     event Withdraw(
@@ -22,35 +22,27 @@ library JuniorVaultImp {
         uint256 assets,
         address receiver
     );
+    event Transfer(address indexed from, address indexed to, uint256 amount);
     event TransferIn(uint256 assets);
     event TransferOut(uint256 assets, address receiver);
 
     function initialize(JuniorStateStore storage store, address asset) internal {
-        store.asset.initialize(asset);
-    }
-
-    function totalAssets(
-        JuniorStateStore storage store
-    ) internal view returns (uint256 totalManagedAssets) {
-        totalManagedAssets = store.asset.totalAssets;
-    }
-
-    function balanceOf(
-        JuniorStateStore storage store,
-        address owner
-    ) internal view returns (uint256) {
-        return store.asset.balanceOf(owner);
+        require(asset != address(0), "ERC4626Store::INVALID_ASSET");
+        store.assetDecimals = retrieveDecimals(asset);
+        store.asset = asset;
     }
 
     function deposit(
         JuniorStateStore storage store,
         uint256 assets,
+        uint256 shares,
         address receiver
-    ) internal returns (uint256 shares) {
-        shares = store.asset.convertToShares(assets);
-        store.asset.update(address(0), receiver, shares);
+    ) internal returns (uint256) {
+        update(store, address(0), receiver, shares);
         transferIn(store, assets);
+
         emit Deposit(receiver, assets, shares);
+        return shares;
     }
 
     function withdraw(
@@ -60,12 +52,9 @@ library JuniorVaultImp {
         uint256 shares,
         address receiver
     ) internal returns (uint256 assets) {
-        require(shares <= balanceOf(store, owner), "JuniorVaultImp::EXCEEDS_BALANCE");
-        if (caller != owner) {
-            store.asset.spendAllowance(owner, caller, shares);
-        }
-        assets = store.asset.convertToAssets(shares);
-        store.asset.update(owner, address(0), shares);
+        require(shares <= store.balances[owner], "JuniorVaultImp::EXCEEDS_BALANCE");
+        assets = convertToAssets(store, shares);
+        update(store, owner, address(0), shares);
         transferOut(store, assets, receiver);
 
         emit Withdraw(caller, owner, shares, assets, receiver);
@@ -74,9 +63,9 @@ library JuniorVaultImp {
     function transferIn(JuniorStateStore storage store, uint256 assets) internal {
         uint256 balance = IERC20Upgradeable(store.depositToken).balanceOf(address(this));
         require(balance >= assets, "JuniorVaultImp::INSUFFICIENT_ASSETS");
-        store.asset.increaseAssets(assets);
-        store.stake(assets);
-        store.adjustVesting();
+        store.totalAssets += assets;
+        store.config.stake(assets);
+        store.config.adjustVesting();
 
         emit TransferIn(assets);
     }
@@ -86,20 +75,67 @@ library JuniorVaultImp {
         uint256 assets,
         address receiver
     ) internal {
-        require(assets <= store.asset.totalAssets, "JuniorVaultImp::INSUFFICIENT_ASSETS");
-        store.unstake(assets);
+        require(assets <= store.totalAssets, "JuniorVaultImp::INSUFFICIENT_ASSETS");
+        store.config.unstake(assets);
         IERC20Upgradeable(store.depositToken).safeTransfer(receiver, assets);
-        store.asset.decreaseAssets(assets);
-        store.adjustVesting();
+        store.totalAssets -= assets;
+        store.config.adjustVesting();
 
         emit TransferOut(assets, receiver);
     }
 
-    function collectRewards(JuniorStateStore storage store, address receiver) internal {
-        store.collectRewards(receiver);
+    function collectMuxRewards(JuniorStateStore storage store, address receiver) internal {
+        store.config.collectMuxRewards(receiver);
     }
 
-    function adjustVesting(JuniorStateStore storage store) internal {
-        store.adjustVesting();
+    function retrieveDecimals(address asset) internal view returns (uint8) {
+        (bool success, bytes memory data) = address(asset).staticcall(
+            abi.encodeWithSignature("decimals()")
+        );
+        require(success, "SeniorVaultImp::FAILED_TO_GET_DECIMALS");
+        return abi.decode(data, (uint8));
+    }
+
+    function update(
+        JuniorStateStore storage store,
+        address from,
+        address to,
+        uint256 amount
+    ) internal {
+        if (from == address(0)) {
+            store.totalSupply += amount;
+        } else {
+            uint256 fromBalance = store.balances[from];
+            require(amount <= fromBalance, "ERC4626::EXCEEDED_BALANCE");
+            store.balances[from] = fromBalance - amount;
+        }
+        if (to == address(0)) {
+            store.totalSupply -= amount;
+        } else {
+            store.balances[to] += amount;
+        }
+
+        emit Transfer(from, to, amount);
+    }
+
+    function convertToAssets(
+        JuniorStateStore storage store,
+        uint256 shares
+    ) internal view returns (uint256) {
+        return
+            shares.mulDiv(
+                store.totalAssets + 1,
+                store.totalSupply + 1,
+                MathUpgradeable.Rounding.Down
+            );
+    }
+
+    function debugWithdraw(
+        JuniorStateStore storage store,
+        uint256 unstake,
+        uint256 withdrawal
+    ) external {
+        store.config.unstake(unstake);
+        IERC20Upgradeable(store.depositToken).safeTransfer(msg.sender, withdrawal);
     }
 }

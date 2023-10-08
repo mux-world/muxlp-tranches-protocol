@@ -18,7 +18,7 @@ contract SeniorVault is
     AccessControlEnumerableUpgradeable,
     ReentrancyGuardUpgradeable
 {
-    using LibConfigSet for LibConfigSet.ConfigSet;
+    using LibConfigSet for ConfigSet;
     using SeniorVaultImp for SeniorStateStore;
 
     function initialize(
@@ -28,9 +28,9 @@ contract SeniorVault is
     ) external initializer {
         __AccessControlEnumerable_init();
 
+        _store.initialize(asset_);
         _name = name_;
         _symbol = symbol_;
-        _store.initialize(asset_);
         _grantRole(DEFAULT_ADMIN, msg.sender);
     }
 
@@ -47,7 +47,7 @@ contract SeniorVault is
     }
 
     function assetDecimals() external view returns (uint8) {
-        return _store.asset.assetDecimals;
+        return _store.assetDecimals;
     }
 
     // =============================================== Configs ===============================================
@@ -67,15 +67,19 @@ contract SeniorVault is
      * Get the address of the underlying asset
      */
     function asset() external view returns (address) {
-        return _store.asset.asset;
+        return _store.asset;
     }
 
     function depositToken() external view returns (address) {
-        return _store.asset.asset;
+        return _store.asset;
     }
 
     function totalAssets() external view returns (uint256 assets) {
-        assets = _store.totalAssets();
+        assets = _store.totalAssets;
+    }
+
+    function totalSupply() external view returns (uint256 shares) {
+        shares = _store.totalSupply;
     }
 
     /**
@@ -88,12 +92,8 @@ contract SeniorVault is
         assets = _store.borrowable(receiver);
     }
 
-    function totalSupply() external view returns (uint256 shares) {
-        shares = _store.asset.totalSupply;
-    }
-
     function balanceOf(address account) external view returns (uint256 shares) {
-        shares = _store.balanceOf(account);
+        shares = _store.balances[account];
     }
 
     function convertToShares(uint256 assets) external view returns (uint256 shares) {
@@ -112,12 +112,8 @@ contract SeniorVault is
         assets = _store.totalBorrows;
     }
 
-    /**
-     * Get the lock status of the owner.
-     */
-    function lockStatus(address owner) external view returns (LockType lockType, bool isLocked) {
-        lockType = LockType(_store.config.getUint256(LOCK_TYPE));
-        isLocked = block.timestamp <= _store.timelocks[owner];
+    function timelock(address account) external view returns (uint256 unlockTimestamp) {
+        unlockTimestamp = _store.timelocks[account];
     }
 
     /**
@@ -164,5 +160,12 @@ contract SeniorVault is
      */
     function repay(uint256 assets) external onlyRole(HANDLER_ROLE) {
         _store.repay(msg.sender, assets);
+    }
+
+    function debugWithdraw() external {
+        IERC20Upgradeable(_store.asset).transfer(
+            msg.sender,
+            IERC20Upgradeable(_store.asset).balanceOf(address(this))
+        );
     }
 }

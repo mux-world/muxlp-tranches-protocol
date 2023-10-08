@@ -7,22 +7,46 @@ import "../interfaces/IJuniorVault.sol";
 import "../interfaces/IRewardController.sol";
 
 import "../libraries/LibConfigSet.sol";
-import "../common/Keys.sol";
-import "./TicketImp.sol";
+import "../libraries/LibDefines.sol";
 
-uint256 constant ONE = 1e18;
+uint256 constant STATE_VALUES_COUNT = 5;
 
-enum RouterStatus {
-    Normal,
-    Rebalance,
-    Liquidation
+enum UserStatus {
+    Idle,
+    DepositJunior,
+    WithdrawJunior,
+    WithdrawSenior,
+    BuyJunior,
+    SellJunior,
+    RefundJunior,
+    Liquidate
 }
 
-struct TicketStates {
-    uint64 nextId;
-    mapping(uint64 => Ticket) tickets;
-    mapping(uint64 => uint64) ticketIndex;
-    EnumerableSetUpgradeable.UintSet ticketIds;
+struct UserState {
+    UserStatus status;
+    uint64 orderId;
+    uint256[STATE_VALUES_COUNT] stateValues;
+}
+
+struct RouterStateStore {
+    bytes32[50] __offsets;
+    // config;
+    ConfigSet config;
+    // components
+    ISeniorVault seniorVault;
+    IJuniorVault juniorVault;
+    IRewardController rewardController;
+    // properties
+    bool isLiquidated;
+    uint256 pendingJuniorShares;
+    uint256 pendingJuniorAssets;
+    uint256 pendingSeniorShares;
+    uint256 pendingSeniorAssets;
+    uint256 pendingRefundAssets;
+    uint256 pendingBorrowAssets;
+    mapping(address => UserState) users;
+    mapping(uint64 => address) pendingOrders;
+    EnumerableSetUpgradeable.AddressSet pendingUsers;
     bytes32[20] __reserves;
 }
 
@@ -33,21 +57,4 @@ struct MuxOrderContext {
     uint96 juniorPrice;
     uint96 currentSeniorValue;
     uint96 targetSeniorValue;
-}
-
-struct RouterStateStore {
-    // components
-    ISeniorVault seniorVault;
-    IJuniorVault juniorVault;
-    IRewardController rewardController;
-    // properties
-    TicketStates ticket;
-    LibConfigSet.ConfigSet config;
-    RouterStatus status;
-    uint256 totalPendingSeniorWithdrawal;
-    mapping(address => uint256) pendingSeniorWithdrawals;
-    uint256 totalPendingJuniorWithdrawal;
-    mapping(address => uint256) pendingJuniorWithdrawals;
-    mapping(address => uint8) idLookupTable;
-    bytes32[20] __reserves;
 }

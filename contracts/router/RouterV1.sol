@@ -17,8 +17,16 @@ contract RouterV1 is
     ReentrancyGuardUpgradeable
 {
     using RouterImp for RouterStateStore;
-    using LibConfigSet for LibConfigSet.ConfigSet;
+    using LibConfigSet for ConfigSet;
     using EnumerableSetUpgradeable for EnumerableSetUpgradeable.UintSet;
+
+    modifier checkStatus() {
+        require(_store.users[msg.sender].status == UserStatus.Idle, "RouterV1::INPROPER_STATUS");
+        require(_store.users[address(0)].status == UserStatus.Idle, "RouterV1::INPROPER_STATUS");
+        require(_store.pendingRefundAssets == 0, "RouterV1::HAS_REFUND_ASSETS");
+        require(!_store.isLiquidated, "RouterV1::LIQUIDATING");
+        _;
+    }
 
     function initialize(
         address seniorVault,
@@ -43,15 +51,25 @@ contract RouterV1 is
         _store.config.setBytes32(configKey, value);
     }
 
-    // function getTickets() external view returns (Ticket[] memory tickets) {
-    //     tickets = _store.getTickets(0, _store.getTicketCount());
-    // }
+    // =============================================== Views ===============================================
+    function getUserStates(address account) external view returns (UserState memory userState) {
+        return _store.users[account];
+    }
 
-    function getTickets(
+    function getUserOrderTime(address account) external view returns (uint32 placeOrderTime) {
+        uint64 orderId = _store.users[account].orderId;
+        if (_store.users[account].orderId != 0) {
+            placeOrderTime = _store.getUserOrderTime(orderId);
+        } else {
+            placeOrderTime = 0;
+        }
+    }
+
+    function getPendingUsers(
         uint256 begin,
         uint256 count
-    ) external view returns (Ticket[] memory tickets) {
-        tickets = _store.getTickets(begin, count);
+    ) external view returns (address[] memory) {
+        return _store.getPendingUsers(begin, count);
     }
 
     function juniorLeverage(
@@ -61,79 +79,116 @@ contract RouterV1 is
         leverage = _store.juniorLeverage(seniorPrice, juniorPrice);
     }
 
+    function pendingJuniorShares() external view returns (uint256) {
+        return _store.pendingJuniorShares;
+    }
+
+    function pendingJuniorAssets() external view returns (uint256) {
+        return _store.pendingJuniorAssets;
+    }
+
+    function pendingSeniorAssets() external view returns (uint256) {
+        return _store.pendingSeniorAssets;
+    }
+
+    function pendingRefundAssets() external view returns (uint256) {
+        return _store.pendingRefundAssets;
+    }
+
+    function juniorNavPerShare(
+        uint256 seniorPrice,
+        uint256 juniorPrice
+    ) external view returns (uint256) {
+        return _store.juniorNavPerShare(seniorPrice, juniorPrice);
+    }
+
     function isJuniorBalanced(
         uint256 seniorPrice,
         uint256 juniorPrice
-    ) external view returns (bool isBalanced) {
+    ) external view returns (bool isBalanced, bool isRebalancing) {
         (isBalanced, , ) = _store.isJuniorBalanced(seniorPrice, juniorPrice);
+        isRebalancing = _store.isRebalancing();
     }
 
-    function depositJunior(uint256 assets) external nonReentrant {
+    function claimableJuniorRewards(address account) external returns (uint256) {
+        _store.updateRewards();
+        return _store.rewardController.claimableJuniorRewards(account);
+    }
+
+    function claimableSeniorRewards(address account) external returns (uint256) {
+        _store.updateRewards();
+        return _store.rewardController.claimableSeniorRewards(account);
+    }
+
+    // =============================================== Actions ===============================================
+
+    // Idle => DepositJunior => Idle
+    function depositJunior(uint256 assets) external checkStatus nonReentrant {
         _store.depositJunior(msg.sender, assets);
     }
 
-    function totalPendingJuniorWithdrawal() external view returns (uint256) {
-        return _store.totalPendingJuniorWithdrawal;
-    }
-
-    function pendingJuniorWithdrawal(address account) external view returns (uint256) {
-        return _store.pendingJuniorWithdrawals[account];
-    }
-
-    function totalPendingSeniorWithdrawal() external view returns (uint256) {
-        return _store.totalPendingSeniorWithdrawal;
-    }
-
-    function pendingSeniorWithdrawal(address account) external view returns (uint256) {
-        return _store.pendingSeniorWithdrawals[account];
-    }
-
-    function withdrawJunior(uint256 shares) external nonReentrant {
+    // Idle => WithdrawJunior => Idle
+    function withdrawJunior(uint256 shares) external checkStatus nonReentrant {
         _store.withdrawJunior(msg.sender, shares);
     }
 
-    function depositSenior(uint256 amount) external nonReentrant {
+    function depositSenior(uint256 amount) external checkStatus nonReentrant {
         _store.depositSenior(msg.sender, amount);
     }
 
-    function withdrawSenior(uint256 amount, bool acceptPenalty) external nonReentrant {
+    // Idle => WithdrawSenior => RefundJunior => Idle
+    function withdrawSenior(uint256 amount, bool acceptPenalty) external checkStatus nonReentrant {
         _store.withdrawSenior(msg.sender, amount, acceptPenalty);
     }
 
-    function handleTicket(uint64 ticketId) external nonReentrant {
-        _store.handleTicket(ticketId);
+    // Idle => BuyJunior / SellJunior => Idle
+    function rebalance(
+        uint256 seniorPrice,
+        uint256 juniorPrice
+    ) external checkStatus onlyRole(KEEPER_ROLE) {
+        _store.rebalance(seniorPrice, juniorPrice);
+    }
+
+    // Idle => SellJunior => Idle
+    function liquidate(uint256 seniorPrice, uint256 juniorPrice) external onlyRole(KEEPER_ROLE) {
+        require(!_store.isLiquidated, "RouterV1::LIQUIDATED");
+        _store.liquidate(seniorPrice, juniorPrice);
+    }
+
+    // Idle => BuyJunior => Idle
+    function refundJunior() external nonReentrant {
+        require(_store.pendingRefundAssets != 0, "RouterV1::NO_REFUND_ASSETS");
+        require(_store.users[address(0)].status == UserStatus.Idle, "RouterV1::INPROPER_STATUS");
+        _store.refundJunior();
     }
 
     function updateRewards() external nonReentrant {
         _store.updateRewards();
     }
 
-    function rebalance(uint256 seniorPrice, uint256 juniorPrice) external onlyRole(KEEPER_ROLE) {
-        _store.rebalance(seniorPrice, juniorPrice);
+    function cancelPendingOperation() external {
+        _store.cancelPendingOperation(msg.sender);
     }
 
-    function liquidate(uint256 seniorPrice, uint256 juniorPrice) external onlyRole(KEEPER_ROLE) {
-        _store.liquidate(seniorPrice, juniorPrice);
+    function claimJuniorRewards() external returns (uint256) {
+        _store.updateRewards();
+        return _store.rewardController.claimJuniorRewardsFor(msg.sender, msg.sender);
     }
 
+    function claimSeniorRewards() external nonReentrant returns (uint256) {
+        _store.updateRewards();
+        return _store.rewardController.claimSeniorRewardsFor(msg.sender, msg.sender);
+    }
+
+    // ============================================= Callbacks =============================================
     function beforeFillLiquidityOrder(
-        IMuxLiquidityCallback.LiquidityOrder calldata order,
-        uint96 assetPrice,
-        uint96 mlpPrice,
-        uint96 currentAssetValue,
-        uint96 targetAssetValue
+        IMuxLiquidityCallback.LiquidityOrder calldata,
+        uint96,
+        uint96,
+        uint96,
+        uint96
     ) external nonReentrant returns (bool isValid) {
-        address orderBook = _store.config.mustGetAddress(MUX_ORDER_BOOK);
-        require(msg.sender == orderBook, "RouterV1::ONLY_ORDERBOOK");
-        MuxOrderContext memory context = MuxOrderContext({
-            orderId: order.id,
-            seniorAssetId: order.assetId,
-            seniorPrice: assetPrice,
-            juniorPrice: mlpPrice,
-            currentSeniorValue: currentAssetValue,
-            targetSeniorValue: targetAssetValue
-        });
-        isValid = _store.beforeOrderFilled(context);
+        isValid = true;
     }
 
     function afterFillLiquidityOrder(
@@ -145,7 +200,10 @@ contract RouterV1 is
         uint96 targetSeniorValue
     ) external nonReentrant {
         address orderBook = _store.config.mustGetAddress(MUX_ORDER_BOOK);
-        require(msg.sender == orderBook, "RouterV1::ONLY_ORDERBOOK");
+        require(
+            msg.sender == orderBook || hasRole(KEEPER_ROLE, msg.sender),
+            "RouterV1::ONLY_ORDERBOOK_OR_KEEPER"
+        );
         MuxOrderContext memory context = MuxOrderContext({
             orderId: order.id,
             seniorAssetId: order.assetId,
@@ -161,7 +219,10 @@ contract RouterV1 is
         IMuxLiquidityCallback.LiquidityOrder calldata order
     ) external nonReentrant {
         address orderBook = _store.config.mustGetAddress(MUX_ORDER_BOOK);
-        require(msg.sender == orderBook, "RouterV1::ONLY_ORDERBOOK");
+        require(
+            msg.sender == orderBook || hasRole(KEEPER_ROLE, msg.sender),
+            "RouterV1::ONLY_ORDERBOOK_OR_KEEPER"
+        );
         _store.onOrderCancelled(order.id);
     }
 }

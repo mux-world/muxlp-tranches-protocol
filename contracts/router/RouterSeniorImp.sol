@@ -7,222 +7,206 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 
 import "../libraries/LibConfigSet.sol";
 import "../libraries/LibUniswap.sol";
+import "../mux/MuxAdapter.sol";
 
-import "./UtilsImp.sol";
-import "./TicketImp.sol";
-import "./AdapterImp.sol";
+import "./RouterUtilImp.sol";
+import "./RouterStatesImp.sol";
+import "./RouterRebalanceImp.sol";
 import "./RouterRewardImp.sol";
 import "./Type.sol";
 
 library RouterSeniorImp {
-    using UtilsImp for RouterStateStore;
-    using TicketImp for RouterStateStore;
-    using AdapterImp for RouterStateStore;
+    using RouterUtilImp for RouterStateStore;
     using RouterRewardImp for RouterStateStore;
-
-    using LibConfigSet for LibConfigSet.ConfigSet;
+    using RouterStatesImp for RouterStateStore;
+    using RouterRebalanceImp for RouterStateStore;
+    using MuxAdapter for ConfigSet;
+    using LibConfigSet for ConfigSet;
     using LibTypeCast for bytes32;
     using SafeERC20Upgradeable for IERC20Upgradeable;
 
-    event DepositSenior(address indexed account, uint256 assets, uint256 shares);
-    event WithdrawSenior(address indexed account, uint256 shares);
-    event WithdrawSeniorDelayed(address indexed account, uint64 indexed ticketId, uint256 shares);
-    event HandleWithdrawSenior(address indexed account, uint64 indexed ticketId, uint256 removals);
+    event DepositSenior(address indexed account, uint256 seniorAssetsToDeposit);
+
+    event WithdrawSenior(address indexed account, uint256 seniorSharesToWithdraw);
+    event WithdrawSeniorDelayed(
+        address indexed account,
+        uint256 seniorSharesToWithdraw,
+        uint256 seniorAssetsToWithdraw,
+        uint256 seniorAssetsWithdrawable
+    );
+    event HandleWithdrawSenior(
+        address indexed account,
+        uint256 seniorSharesToWithdraw,
+        uint256 seniorAssetsToWithdraw,
+        uint256 juniorAssetsToRemove,
+        uint256 seniorAssetsWithdrawable
+    );
     event WithdrawSeniorSuccess(
         address indexed account,
-        uint64 indexed ticketId,
-        uint256 repayment,
-        uint256 overflows
+        uint256 seniorSharesToWithdraw,
+        uint256 seniorAssetsToWithdraw,
+        uint256 juniorAssetsToRemove,
+        uint256 seniorAssetsWithdrawable,
+        uint256 seniorAssetsToRepay,
+        uint256 seniorAssetsOverflow
     );
-    event WithdrawSeniorFailed(address indexed account, uint64 indexed ticketId);
-    event IncreasePendingSeniorWithdrawal(
+    event WithdrawSeniorFailed(
         address indexed account,
-        uint256 shares,
-        uint256 personalPendingWithdrawal,
-        uint256 totalPendingWithdrawal
-    );
-    event DecreasePendingSeniorWithdrawal(
-        address indexed account,
-        uint256 shares,
-        uint256 personalPendingWithdrawal,
-        uint256 totalPendingWithdrawal
+        uint256 seniorSharesToWithdraw,
+        uint256 seniorAssetsToWithdraw,
+        uint256 juniorAssetsToRemove,
+        uint256 seniorAssetsWithdrawable
     );
 
     // =============================================== Deposit Senior ===============================================
     function depositSenior(
         RouterStateStore storage store,
         address account,
-        uint256 assets
-    ) public returns (uint256 shares) {
-        require(assets > 0, "RouterSeniorImp::ZERO_AMOUNT");
+        uint256 seniorAssetsToDeposit
+    ) public {
+        require(seniorAssetsToDeposit > 0, "RouterSeniorImp::ZERO_AMOUNT");
         store.updateRewards(account);
         IERC20Upgradeable(store.seniorVault.depositToken()).safeTransferFrom(
             account,
             address(store.seniorVault),
-            assets
+            seniorAssetsToDeposit
         );
-        shares = store.seniorVault.deposit(assets, account);
-        emit DepositSenior(account, assets, shares);
+        store.seniorVault.deposit(seniorAssetsToDeposit, account);
+        emit DepositSenior(account, seniorAssetsToDeposit);
     }
 
     // =============================================== Withdraw Senior ===============================================
+    function checkTimelock(
+        RouterStateStore storage store,
+        address account,
+        bool acceptPenalty
+    ) internal view {
+        bool isLocked = store.seniorVault.timelock(account) >= block.timestamp;
+        require(!isLocked || (isLocked && acceptPenalty), "RouterSeniorImp::LOCKED");
+    }
+
     function withdrawSenior(
         RouterStateStore storage store,
         address account,
-        uint256 shares, // assets
+        uint256 seniorSharesToWithdraw, // assets
         bool acceptPenalty
     ) public {
-        // TODO: lock
-        (ISeniorVault.LockType lockType, bool isLocked) = store.seniorVault.lockStatus(account);
-        if (lockType == ISeniorVault.LockType.HardLock) {
-            require(!isLocked, "RouterSeniorImp::LOCKED");
-        } else if (lockType == ISeniorVault.LockType.SoftLock) {
-            require(!isLocked || (isLocked && acceptPenalty), "RouterSeniorImp::LOCKED");
-        }
-        uint256 pendingWithdrawal = store.pendingSeniorWithdrawals[account];
-        uint256 maxWithdrawal = store.seniorVault.balanceOf(account);
-        maxWithdrawal = maxWithdrawal > pendingWithdrawal ? maxWithdrawal - pendingWithdrawal : 0;
-        require(shares <= maxWithdrawal, "RouterSeniorImp::EXCEEDS_WITHDRAWABLE");
-
-        uint256 assets = store.seniorVault.convertToAssets(shares);
-        uint256 available = store.seniorTotalAssets();
-        if (assets <= available) {
-            store.updateRewards(account);
-            store.seniorVault.withdraw(msg.sender, account, shares, account);
-            emit WithdrawSenior(account, shares);
-        } else {
-            Ticket storage ticket = store.createTicket(
-                Action.WithdrawSenior,
-                abi.encode(
-                    SeniorWithdrawParams({
-                        caller: msg.sender,
-                        account: account,
-                        shares: shares,
-                        removals: 0, // will fill in handleWithdrawSenior
-                        minRepayments: assets - available
-                    })
-                )
-            );
-            emit WithdrawSeniorDelayed(account, ticket.id, shares);
-            // status init => pending
-            handleWithdrawSenior(store, ticket);
-        }
-    }
-
-    function handleWithdrawSenior(RouterStateStore storage store, Ticket storage ticket) public {
+        checkTimelock(store, account, acceptPenalty);
         require(
-            ticket.status == Status.Init || ticket.status == Status.Failed,
-            "ImpRouter::INVALID_STATUS"
+            seniorSharesToWithdraw <= store.seniorVault.balanceOf(account),
+            "RouterSeniorImp::EXCEEDS_BALANCE"
         );
-        // estimate repay
-        SeniorWithdrawParams memory params = abi.decode(ticket.params, (SeniorWithdrawParams));
-        if (params.account != address(0)) {
-            params.removals = store.estimateMaxIn(params.minRepayments);
-            increasePendingWithdrawal(store, params.account, params.shares);
+        // withdraw
+        uint256 seniorAssetsToWithdraw = store.seniorVault.convertToAssets(seniorSharesToWithdraw);
+        uint256 seniorAssetsWithdrawable = store.seniorVault.totalAssets() >
+            store.pendingSeniorAssets
+            ? store.seniorVault.totalAssets() - store.pendingSeniorAssets
+            : 0;
+
+        if (seniorAssetsToWithdraw <= seniorAssetsWithdrawable) {
+            store.updateRewards(account);
+            store.seniorVault.withdraw(msg.sender, account, seniorSharesToWithdraw, account);
+            emit WithdrawSenior(account, seniorSharesToWithdraw);
+        } else {
+            uint256 juniorAssetsToRemove = store.toJuniorUnit(
+                store.config.estimateMaxIn(seniorAssetsToWithdraw - seniorAssetsWithdrawable)
+            );
+            store.juniorVault.transferOut(juniorAssetsToRemove);
+            uint64 orderId = store.config.placeRemoveOrder(
+                store.juniorVault.depositToken(),
+                store.seniorVault.depositToken(),
+                juniorAssetsToRemove
+            );
+            store.setOrderId(account, orderId);
+            store.setWithdrawSeniorStatus(
+                account,
+                seniorSharesToWithdraw,
+                seniorAssetsToWithdraw,
+                juniorAssetsToRemove,
+                seniorAssetsWithdrawable
+            );
+            emit WithdrawSeniorDelayed(
+                account,
+                seniorSharesToWithdraw,
+                seniorAssetsToWithdraw,
+                seniorAssetsWithdrawable
+            );
         }
-        store.juniorVault.transferOut(params.removals);
-        uint64 orderId = store.placeRemoveOrder(params.removals);
-        store.updateTicket(ticket, orderId, Status.Pending, abi.encode(params));
-
-        emit HandleWithdrawSenior(params.account, ticket.id, params.removals);
-    }
-
-    function beforeWithdrawSenior(
-        RouterStateStore storage store,
-        MuxOrderContext memory context,
-        Ticket storage ticket
-    ) public view returns (bool) {
-        SeniorWithdrawParams memory params = abi.decode(ticket.params, (SeniorWithdrawParams));
-        uint256 seniorAmountOut = store.estimateExactOut(
-            context.seniorAssetId,
-            params.removals,
-            context.seniorPrice,
-            context.juniorPrice,
-            context.currentSeniorValue,
-            context.targetSeniorValue
-        );
-        return seniorAmountOut >= params.minRepayments;
     }
 
     function onWithdrawSeniorSuccess(
         RouterStateStore storage store,
         MuxOrderContext memory,
-        Ticket storage ticket,
-        uint256 amountOut
+        address account,
+        uint256 seniorAssetsBought
     ) public {
-        SeniorWithdrawParams memory params = abi.decode(ticket.params, (SeniorWithdrawParams));
-        // 1. repay
-        uint256 totalBorrows = store.seniorBorrows();
-        uint256 repayments = MathUpgradeable.min(amountOut, totalBorrows);
+        (
+            uint256 seniorSharesToWithdraw,
+            uint256 seniorAssetsToWithdraw,
+            uint256 juniorAssetsToRemove,
+            uint256 seniorAssetsWithdrawable
+        ) = store.getWithdrawSeniorStatus(account);
+        require(
+            seniorAssetsBought + seniorAssetsWithdrawable >= seniorAssetsToWithdraw,
+            "RouterSeniorImp::INSUFFICIENT_REPAYMENT"
+        );
+        uint256 seniorAssetsBorrrowed = store.seniorVault.borrows(address(this));
+        uint256 seniorAssetsToRepay = MathUpgradeable.min(
+            seniorAssetsBought,
+            seniorAssetsBorrrowed
+        );
         IERC20Upgradeable(store.seniorVault.depositToken()).safeTransfer(
             address(store.seniorVault),
-            repayments
+            seniorAssetsToRepay
         );
-        store.seniorVault.repay(repayments);
-        // 2. if need withdraw
-        if (params.account != address(0)) {
-            store.seniorVault.withdraw(
-                params.caller,
-                params.account,
-                params.shares,
-                params.account
-            );
-            decreasePendingWithdrawal(store, params.account, params.shares);
-        }
-        // 3. return the remaining over total debts to junior.
-        //    only the last junior or liquidation will have overflows.
-        uint256 overflows = amountOut - repayments;
-        if (overflows > 0) {
-            // buy MUXLP
-            store.createTicket(
-                Action.DepositJunior,
-                abi.encode(DepositJuniorParams({assets: overflows}))
-            );
-        } else if (store.status != RouterStatus.Normal) {
-            store.status = RouterStatus.Normal;
+        store.seniorVault.repay(seniorAssetsToRepay);
+        store.seniorVault.withdraw(account, account, seniorSharesToWithdraw, account);
+        store.cleanWithdrawSeniorStatus(account);
+        uint256 seniorAssetsOverflow = seniorAssetsBought - seniorAssetsToRepay;
+        if (seniorAssetsOverflow > 0) {
+            store.pendingRefundAssets += seniorAssetsOverflow;
         }
 
-        emit WithdrawSeniorSuccess(params.account, ticket.id, repayments, overflows);
+        // console.log("onWithdrawSeniorSuccess");
+        // console.log("----------------------------------------------");
+        // console.log("seniorSharesToWithdraw", seniorSharesToWithdraw);
+        // console.log("seniorAssetsToWithdraw", seniorAssetsToWithdraw);
+        // console.log("juniorAssetsToRemove", juniorAssetsToRemove);
+        // console.log("seniorAssetsWithdrawable", seniorAssetsWithdrawable);
+        // console.log("seniorAssetsToRepay", seniorAssetsToRepay);
+        // console.log("seniorAssetsOverflow", seniorAssetsOverflow);
+        // console.log("----------------------------------------------");
+
+        emit WithdrawSeniorSuccess(
+            account,
+            seniorSharesToWithdraw,
+            seniorAssetsToWithdraw,
+            juniorAssetsToRemove,
+            seniorAssetsWithdrawable,
+            seniorAssetsToRepay,
+            seniorAssetsOverflow
+        );
     }
 
-    function onWithdrawSeniorFailed(RouterStateStore storage store, Ticket storage ticket) public {
-        SeniorWithdrawParams memory params = abi.decode(ticket.params, (SeniorWithdrawParams));
+    function onWithdrawSeniorFailed(RouterStateStore storage store, address account) public {
+        (
+            uint256 seniorSharesToWithdraw,
+            uint256 seniorAssetsToWithdraw,
+            uint256 juniorAssetsToRemove,
+            uint256 seniorAssetsWithdrawable
+        ) = store.getWithdrawSeniorStatus(account);
         IERC20Upgradeable(store.juniorVault.depositToken()).safeTransfer(
             address(store.juniorVault),
-            params.removals
+            juniorAssetsToRemove
         );
-        store.juniorVault.transferIn(params.removals);
-        decreasePendingWithdrawal(store, params.account, params.shares);
-        emit WithdrawSeniorFailed(params.account, ticket.id);
-    }
-
-    function increasePendingWithdrawal(
-        RouterStateStore storage store,
-        address account,
-        uint256 shares
-    ) internal {
-        store.pendingSeniorWithdrawals[account] += shares;
-        store.totalPendingSeniorWithdrawal += shares;
-        emit IncreasePendingSeniorWithdrawal(
+        store.juniorVault.transferIn(juniorAssetsToRemove);
+        store.cleanWithdrawSeniorStatus(account);
+        emit WithdrawSeniorFailed(
             account,
-            shares,
-            store.pendingSeniorWithdrawals[account],
-            store.totalPendingSeniorWithdrawal
-        );
-    }
-
-    function decreasePendingWithdrawal(
-        RouterStateStore storage store,
-        address account,
-        uint256 shares
-    ) internal {
-        store.pendingSeniorWithdrawals[account] -= shares;
-        store.totalPendingSeniorWithdrawal -= shares;
-        emit DecreasePendingSeniorWithdrawal(
-            account,
-            shares,
-            store.pendingSeniorWithdrawals[account],
-            store.totalPendingSeniorWithdrawal
+            seniorSharesToWithdraw,
+            seniorAssetsToWithdraw,
+            juniorAssetsToRemove,
+            seniorAssetsWithdrawable
         );
     }
 }

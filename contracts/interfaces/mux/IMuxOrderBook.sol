@@ -39,4 +39,6 @@ interface IMuxOrderBook {
         uint96 currentAssetValue,
         uint96 targetAssetValue
     ) external;
+
+    function getOrder(uint64 orderId) external view returns (bytes32[3] memory, bool);
 }

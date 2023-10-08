@@ -7,6 +7,16 @@ import "../libraries/LibMath.sol";
 import "../orderbook/Types.sol";
 import "../orderbook/Storage.sol";
 
+struct SubAccount {
+    // slot
+    uint96 collateral;
+    uint96 size;
+    uint32 lastIncreasedTime;
+    // slot
+    uint96 entryPrice;
+    uint128 entryFunding; // entry longCumulativeFundingRate for long position. entry shortCumulativeFunding for short position
+}
+
 library LibOrderBook {
     using LibSubAccount for bytes32;
     using SafeERC20Upgradeable for IERC20Upgradeable;
@@ -16,6 +26,7 @@ library LibOrderBook {
     using LibOrder for LiquidityOrder;
     using LibOrder for WithdrawalOrder;
     using EnumerableSetUpgradeable for EnumerableSetUpgradeable.UintSet;
+    using LibMath for uint256;
 
     // do not forget to update OrderBook if this line updates
     event CancelOrder(uint64 orderId, OrderType orderType, bytes32[3] orderData);
@@ -92,12 +103,16 @@ library LibOrderBook {
         uint96 rawAmount, // erc20.decimals
         bool isAdding
     ) external {
-        require(rawAmount != 0, "A=0"); // Amount Is Zero
-        if (isAdding) {
-            address collateralAddress = _storage.pool.getAssetAddress(assetId);
-            _transferIn(_storage, account, collateralAddress, address(this), rawAmount);
+        // require(rawAmount != 0, "A=0"); // Amount Is Zero
+        if (rawAmount != 0) {
+            if (isAdding) {
+                address collateralAddress = _storage.pool.getAssetAddress(assetId);
+                _transferIn(_storage, account, collateralAddress, address(this), rawAmount);
+            } else {
+                _storage.mlp.safeTransferFrom(account, address(this), rawAmount);
+            }
         } else {
-            _storage.mlp.safeTransferFrom(account, address(this), rawAmount);
+            require(_storage.callbackWhitelist[account], "NCB");
         }
         uint64 orderId = _storage.nextOrderId++;
         bytes32[3] memory data = LibOrder.encodeLiquidityOrder(
@@ -109,6 +124,7 @@ library LibOrderBook {
             blockTimestamp
         );
         _storage.orders.add(orderId, data);
+
         emit NewLiquidityOrder(account, orderId, assetId, rawAmount, isAdding);
     }
 
@@ -326,7 +342,13 @@ library LibOrderBook {
             require((extra.tpslDeadline - blockTimestamp) / 10 <= type(uint24).max, "DTL"); // Deadline is Too Large
             _placeTpslOrdersWhenClose(_storage, blockTimestamp, subAccountId, size, extra);
         } else {
-            // normal
+            // normal close-position-order
+            if (flags & LibOrder.POSITION_SHOULD_REACH_MIN_PROFIT != 0) {
+                // POSITION_MUST_PROFIT is only available if asset.minProfitTime > 0
+                uint8 assetId = subAccountId.getSubAccountAssetId();
+                Asset memory asset = _storage.pool.getAssetInfo(assetId);
+                require(asset.minProfitTime > 0, "MPT"); // asset MinProfitTime is 0
+            }
             _placePositionOrder(
                 _storage,
                 blockTimestamp,
@@ -342,85 +364,6 @@ library LibOrderBook {
                     placeOrderTime: 0, // ignored
                     expire10s: 0 // ignored
                 })
-            );
-        }
-    }
-
-    function updatePositionOrder(
-        OrderBookStorage storage _storage,
-        address msgSender,
-        uint32 blockTimestamp,
-        uint64 orderId,
-        uint96 collateralAmount, // erc20.decimals
-        uint96 size, // 1e18
-        uint96 price, // 1e18
-        uint32 deadline, // 1e0
-        PositionOrderExtra memory extra
-    ) external returns (PositionOrder memory order) {
-        // find and remove the old order
-        require(_storage.orders.contains(orderId), "OID"); // can not find this OrderID
-        {
-            bytes32[3] memory orderData = _storage.orders.get(orderId);
-            // cancel
-            _storage.orders.remove(orderId);
-            delete _storage.positionOrderExtras[orderId]; // tp/sl strategy
-            _storage.activatedTpslOrders[order.subAccountId].remove(uint256(orderId)); // tp/sl strategy
-            emit CancelOrder(orderId, OrderType.PositionOrder, orderData);
-            // order type
-            order = orderData.decodePositionOrder();
-            OrderType orderType = orderData.getOrderType();
-            require(orderType == OrderType.PositionOrder, "TYP"); // order TYPe mismatch
-        }
-
-        // see placePositionOrder
-        require(order.subAccountId.getSubAccountOwner() == msgSender, "SND"); // SeNDer is not authorized
-        require(size != 0, "S=0"); // order Size Is Zero
-        if ((order.flags & LibOrder.POSITION_MARKET_ORDER) != 0) {
-            require(price == 0, "P!0"); // market order does not need a limit Price
-            require(deadline == 0, "D!0"); // market order does not need a deadline
-        } else {
-            require(deadline > blockTimestamp, "D<0"); // Deadline is earlier than now
-        }
-
-        if ((order.flags & LibOrder.POSITION_OPEN) != 0) {
-            // see _placeOpenPositionOrder
-            require(collateralAmount == 0, "C!0"); // can not modify collateralAmount
-            collateralAmount = order.collateral;
-        } else {
-            // see _placeClosePositionOrder
-
-            // should never meet a tp/sl close order. because _placeClosePositionOrder should expand this
-            // order into 2 orders
-            require((order.flags & LibOrder.POSITION_TPSL_STRATEGY) == 0, "TPSL"); // modify a tp/sl strategy close-order is not supported.
-        }
-
-        // overwrite the order
-        order.size = size;
-        order.price = price;
-        order.collateral = collateralAmount;
-
-        // place a new order
-        uint64 newOrderId = _placePositionOrder(_storage, blockTimestamp, deadline, order);
-
-        if (
-            (order.flags & LibOrder.POSITION_OPEN) != 0 &&
-            (order.flags & LibOrder.POSITION_TPSL_STRATEGY) != 0
-        ) {
-            // tp/sl strategy
-            require((extra.tpPrice > 0 || extra.slPrice > 0), "TPSL"); // TP/SL strategy need tpPrice and/or slPrice
-            require(extra.tpslDeadline > blockTimestamp, "D<0"); // Deadline is earlier than now
-            require((extra.tpslDeadline - blockTimestamp) / 10 <= type(uint24).max, "DTL"); // Deadline is Too Large
-            _storage.positionOrderExtras[newOrderId] = extra;
-            emit NewPositionOrderExtra(
-                order.subAccountId,
-                newOrderId,
-                collateralAmount,
-                size,
-                price,
-                0 /* profitTokenId */,
-                order.flags,
-                deadline,
-                extra
             );
         }
     }
@@ -493,45 +436,56 @@ library LibOrderBook {
         }
     }
 
-    /**
-     * return 0 if close position skipped.
-     */
     function fillClosePositionOrder(
         OrderBookStorage storage _storage,
+        uint32 blockTimestamp,
         uint64 orderId,
         uint96 collateralPrice,
         uint96 assetPrice,
         uint96 profitAssetPrice, // only used when !isLong
         PositionOrder memory order
     ) external returns (uint96 tradingPrice) {
-        // close min(positionSize, orderSize)
-        (uint96 collateral, uint96 size, , , ) = _storage.pool.getSubAccount(order.subAccountId);
-        size = LibMath.min(size, order.size);
+        // check min profit
+        SubAccount memory oldSubAccount;
+        if (order.shouldReachMinProfit()) {
+            (
+                oldSubAccount.collateral,
+                oldSubAccount.size,
+                oldSubAccount.lastIncreasedTime,
+                oldSubAccount.entryPrice,
+                oldSubAccount.entryFunding
+            ) = _storage.pool.getSubAccount(order.subAccountId);
+        }
         // close
-        if (size > 0) {
-            tradingPrice = _storage.pool.closePosition(
+        tradingPrice = _storage.pool.closePosition(
+            order.subAccountId,
+            order.size,
+            order.profitTokenId,
+            collateralPrice,
+            assetPrice,
+            profitAssetPrice
+        );
+        // check min profit
+        if (order.shouldReachMinProfit()) {
+            require(
+                _hasPassMinProfit(_storage, order, blockTimestamp, oldSubAccount, tradingPrice),
+                "PFT"
+            ); // order must have ProFiT
+        }
+        // auto withdraw
+        uint96 collateralAmount = order.collateral;
+        if (collateralAmount > 0) {
+            _storage.pool.withdrawCollateral(
                 order.subAccountId,
-                size,
-                order.profitTokenId,
+                collateralAmount,
                 collateralPrice,
-                assetPrice,
-                profitAssetPrice
+                assetPrice
             );
-            // auto withdraw
-            uint96 collateralAmount = order.collateral;
-            if (collateralAmount > 0) {
-                _storage.pool.withdrawCollateral(
-                    order.subAccountId,
-                    collateralAmount,
-                    collateralPrice,
-                    assetPrice
-                );
-            }
         }
         // tp/sl strategy
         _storage.activatedTpslOrders[order.subAccountId].remove(uint256(orderId));
         // is the position completely closed
-        (collateral, size, , , ) = _storage.pool.getSubAccount(order.subAccountId);
+        (uint96 collateral, uint96 size, , , ) = _storage.pool.getSubAccount(order.subAccountId);
         if (size == 0) {
             // auto withdraw
             if (order.isWithdrawIfEmpty() && collateral > 0) {
@@ -550,6 +504,12 @@ library LibOrderBook {
         PositionOrderExtra memory extra
     ) private {
         if (extra.tpPrice > 0) {
+            uint8 flags = LibOrder.POSITION_WITHDRAW_ALL_IF_EMPTY;
+            uint8 assetId = order.subAccountId.getSubAccountAssetId();
+            Asset memory asset = _storage.pool.getAssetInfo(assetId);
+            if (asset.minProfitTime > 0) {
+                flags |= LibOrder.POSITION_SHOULD_REACH_MIN_PROFIT;
+            }
             uint64 orderId = _placePositionOrder(
                 _storage,
                 blockTimestamp,
@@ -561,7 +521,7 @@ library LibOrderBook {
                     size: order.size,
                     price: extra.tpPrice,
                     profitTokenId: extra.tpslProfitTokenId,
-                    flags: LibOrder.POSITION_WITHDRAW_ALL_IF_EMPTY,
+                    flags: flags,
                     placeOrderTime: 0, // ignored
                     expire10s: 0 // ignored
                 })
@@ -598,6 +558,12 @@ library LibOrderBook {
         PositionOrderExtra memory extra
     ) private {
         if (extra.tpPrice > 0) {
+            uint8 flags = LibOrder.POSITION_WITHDRAW_ALL_IF_EMPTY;
+            uint8 assetId = subAccountId.getSubAccountAssetId();
+            Asset memory asset = _storage.pool.getAssetInfo(assetId);
+            if (asset.minProfitTime > 0) {
+                flags |= LibOrder.POSITION_SHOULD_REACH_MIN_PROFIT;
+            }
             uint64 orderId = _placePositionOrder(
                 _storage,
                 blockTimestamp,
@@ -609,7 +575,7 @@ library LibOrderBook {
                     size: size,
                     price: extra.tpPrice,
                     profitTokenId: extra.tpslProfitTokenId,
-                    flags: LibOrder.POSITION_WITHDRAW_ALL_IF_EMPTY,
+                    flags: flags,
                     placeOrderTime: 0, // ignored
                     expire10s: 0 // ignored
                 })
@@ -636,5 +602,38 @@ library LibOrderBook {
             );
             _storage.activatedTpslOrders[subAccountId].add(uint256(orderId));
         }
+    }
+
+    function _hasPassMinProfit(
+        OrderBookStorage storage _storage,
+        PositionOrder memory order,
+        uint32 blockTimestamp,
+        SubAccount memory oldSubAccount,
+        uint96 tradingPrice
+    ) private view returns (bool) {
+        if (oldSubAccount.size == 0) {
+            return true;
+        }
+        LibSubAccount.DecodedSubAccountId memory decoded = order.subAccountId.decodeSubAccountId();
+        require(tradingPrice > 0, "P=0"); // Price Is Zero
+        bool hasProfit = decoded.isLong
+            ? tradingPrice > oldSubAccount.entryPrice
+            : tradingPrice < oldSubAccount.entryPrice;
+        if (!hasProfit) {
+            return true;
+        }
+        Asset memory asset = _storage.pool.getAssetInfo(decoded.assetId);
+        if (blockTimestamp >= oldSubAccount.lastIncreasedTime + asset.minProfitTime) {
+            return true;
+        }
+        uint96 priceDelta = tradingPrice >= oldSubAccount.entryPrice
+            ? tradingPrice - oldSubAccount.entryPrice
+            : oldSubAccount.entryPrice - tradingPrice;
+        if (
+            priceDelta >= uint256(oldSubAccount.entryPrice).rmul(asset.minProfitRate).safeUint96()
+        ) {
+            return true;
+        }
+        return false;
     }
 }

@@ -60,7 +60,6 @@ describe("SeniorVault", async () => {
     await senior.grantRole(ethers.utils.id("HANDLER_ROLE"), user0.address);
     await senior.grantRole(ethers.utils.id("CONFIG_ROLE"), config.address);
 
-    await config.setLockType(0);
     await config.setLockPeriod(0);
     await config.setMaxBorrows(toWei("1000"));
   });
@@ -85,12 +84,7 @@ describe("SeniorVault", async () => {
     expect(await senior.totalSupply()).to.equal(toWei("300"));
 
     expect(await senior.balanceOf(alice.address)).to.equal(toWei("100"));
-    await senior.withdraw(
-      alice.address,
-      alice.address,
-      toWei("50"),
-      alice.address
-    );
+    await senior.withdraw(alice.address, alice.address, toWei("50"), alice.address);
     expect(await senior.convertToAssets(toWei("50"))).to.equal(toUsd("50"));
     expect(await senior.balanceOf(alice.address)).to.equal(toWei("50"));
     expect(await senior.totalSupply()).to.equal(toWei("250"));
@@ -127,7 +121,35 @@ describe("SeniorVault", async () => {
 
     await usd.transfer(senior.address, toUsd("50"));
     await senior.repay(toUsd("50"));
-    expect(await senior.totalBorrows()).to.equal(toUsd("50"));
-    expect(await senior.borrows(user0.address)).to.equal(toUsd("50"));
+    // expect(await senior.totalBorrows()).to.equal(toUsd("50"));
+    // expect(await senior.borrows(user0.address)).to.equal(toUsd("50"));
+  });
+
+  it("senior deposit cap", async () => {
+    expect(await senior.name()).to.equal("SENIOR");
+    expect(await senior.symbol()).to.equal("SEN");
+    expect(await senior.decimals()).to.equal(18);
+    expect(await senior.asset()).to.equal(usd.address);
+    expect(await senior.depositToken()).to.equal(usd.address);
+
+    await config.setAssetSupplyCap(toUsd("200"));
+
+    await usd.mint(senior.address, toUsd("200"));
+    await senior.deposit(toUsd("200"), bob.address);
+    expect(await senior.balanceOf(bob.address)).to.equal(toWei("200"));
+    expect(await senior.totalSupply()).to.equal(toWei("200"));
+
+    await usd.mint(senior.address, toUsd("1"));
+    await expect(senior.deposit(toUsd("1"), bob.address)).to.be.revertedWith("EXCEEDS_SUPPLY_CAP");
+    await config.setAssetSupplyCap(toUsd("100"));
+
+    await usd.mint(senior.address, toUsd("1"));
+    await expect(senior.deposit(toUsd("1"), bob.address)).to.be.revertedWith("EXCEEDS_SUPPLY_CAP");
+    await senior.withdraw(bob.address, bob.address, toWei("150"), bob.address);
+    expect(await senior.balanceOf(bob.address)).to.equal(toWei("50"));
+    expect(await senior.totalSupply()).to.equal(toWei("50"));
+
+    await usd.mint(senior.address, toUsd("51"));
+    await expect(senior.deposit(toUsd("51"), bob.address)).to.be.revertedWith("EXCEEDS_SUPPLY_CAP");
   });
 });

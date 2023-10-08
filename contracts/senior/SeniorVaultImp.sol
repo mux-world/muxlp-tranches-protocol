@@ -9,12 +9,10 @@ import "@openzeppelin/contracts-upgradeable/token/ERC20/IERC20Upgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC20/utils/SafeERC20Upgradeable.sol";
 
 import "../libraries/LibConfigSet.sol";
-import "../libraries/LibERC4626.sol";
 import "./SeniorVaultStore.sol";
 
 library SeniorVaultImp {
-    using LibERC4626 for ERC4626Store;
-    using LibConfigSet for LibConfigSet.ConfigSet;
+    using LibConfigSet for ConfigSet;
     using SafeERC20Upgradeable for IERC20Upgradeable;
 
     event Deposit(address indexed owner, uint256 assets, uint256 shares, uint256 unlockTime);
@@ -29,15 +27,14 @@ library SeniorVaultImp {
     event Borrow(uint256 assets, address receiver);
     event Repay(uint256 assets, address receiver);
 
+    event Transfer(address indexed from, address indexed to, uint256 amount);
     event TransferIn(uint256 assets);
     event TransferOut(uint256 assets, address receiver);
 
     function initialize(SeniorStateStore storage store, address asset) internal {
-        store.asset.initialize(asset);
-    }
-
-    function totalAssets(SeniorStateStore storage store) internal view returns (uint256) {
-        return store.asset.totalAssets;
+        require(asset != address(0), "ERC4626Store::INVALID_ASSET");
+        store.assetDecimals = retrieveDecimals(asset);
+        store.asset = asset;
     }
 
     function borrowable(
@@ -46,7 +43,7 @@ library SeniorVaultImp {
     ) internal view returns (uint256 assets) {
         // max borrows
         uint256 maxBorrow = store.config.getUint256(MAX_BORROWS);
-        uint256 available = IERC20Upgradeable(store.asset.asset).balanceOf(address(this));
+        uint256 available = IERC20Upgradeable(store.asset).balanceOf(address(this));
         if (maxBorrow != 0) {
             uint256 capacity = maxBorrow > store.totalBorrows ? maxBorrow - store.totalBorrows : 0;
             assets = MathUpgradeable.min(capacity, available);
@@ -62,27 +59,6 @@ library SeniorVaultImp {
         }
     }
 
-    function balanceOf(
-        SeniorStateStore storage store,
-        address owner
-    ) internal view returns (uint256) {
-        return store.asset.balanceOf(owner);
-    }
-
-    function convertToShares(
-        SeniorStateStore storage store,
-        uint256 assets // assetDecimals
-    ) internal view returns (uint256 shares) {
-        shares = assets * (10 ** (18 - store.asset.assetDecimals));
-    }
-
-    function convertToAssets(
-        SeniorStateStore storage store,
-        uint256 shares
-    ) internal view returns (uint256 assets) {
-        assets = shares / (10 ** (18 - store.asset.assetDecimals));
-    }
-
     // deposit stable coin into vault
     function deposit(
         SeniorStateStore storage store,
@@ -90,8 +66,14 @@ library SeniorVaultImp {
         address receiver
     ) internal returns (uint256 shares) {
         require(assets > 0, "SeniorVaultImp::INVALID_ASSETS");
+        uint256 assetSupplyCap = store.config.getUint256(ASSET_SUPPLY_CAP);
+        uint256 assetSupply = convertToAssets(store, store.totalSupply);
+        require(
+            assetSupplyCap == 0 || assetSupply + assets <= assetSupplyCap,
+            "SeniorVaultImp::EXCEEDS_SUPPLY_CAP"
+        );
         shares = convertToShares(store, assets);
-        store.asset.update(address(0), receiver, shares);
+        update(store, address(0), receiver, shares);
         transferIn(store, assets);
         uint256 unlockTime = updateTimelock(store, receiver);
 
@@ -105,40 +87,35 @@ library SeniorVaultImp {
         uint256 shares,
         address receiver
     ) internal returns (uint256 assets, uint256 penalty) {
-        require(shares <= balanceOf(store, owner), "SeniorVaultImp::EXCEEDS_MAX_REDEEM");
+        require(shares <= store.balances[owner], "SeniorVaultImp::EXCEEDS_MAX_REDEEM");
         assets = convertToAssets(store, shares);
-        if (caller != owner) {
-            store.asset.spendAllowance(owner, caller, shares);
-        }
-        store.asset.update(owner, address(0), shares);
-        penalty = collectPenaltyByTimelock(store, owner, assets);
-        assets -= penalty;
+        update(store, owner, address(0), shares);
+        (penalty, assets) = collectWithdrawPenalty(store, owner, assets);
         transferOut(store, assets, receiver);
 
         emit Withdraw(caller, owner, shares, assets, receiver, penalty);
     }
 
-    function collectPenaltyByTimelock(
+    function collectWithdrawPenalty(
         SeniorStateStore storage store,
         address owner,
         uint256 assets // assetDecimals
-    ) internal returns (uint256) {
+    ) internal returns (uint256 penalty, uint256 assetsAfterPenalty) {
         if (block.timestamp > store.timelocks[owner]) {
-            return 0;
-        }
-        LockType lockType = LockType(store.config.getUint256(LOCK_TYPE));
-        if (lockType == LockType.HardLock) {
-            require(block.timestamp > store.timelocks[owner], "SeniorVaultImp::LOCKED");
-        } else if (lockType == LockType.SoftLock) {
+            penalty = 0;
+            assetsAfterPenalty = assets;
+        } else {
             uint256 lockPenaltyRate = store.config.getUint256(LOCK_PENALTY_RATE);
             address receiver = store.config.getAddress(LOCK_PENALTY_RECIPIENT);
-            if (lockPenaltyRate != 0 && receiver != address(0)) {
-                uint256 penalty = (assets * lockPenaltyRate) / ONE;
+            if (lockPenaltyRate == 0 || receiver == address(0)) {
+                penalty = 0;
+                assetsAfterPenalty = assets;
+            } else {
+                penalty = (assets * lockPenaltyRate) / ONE;
+                assetsAfterPenalty = assets - penalty;
                 transferOut(store, penalty, receiver);
-                return penalty;
             }
         }
-        return 0;
     }
 
     function borrow(SeniorStateStore storage store, uint256 assets, address receiver) internal {
@@ -153,20 +130,18 @@ library SeniorVaultImp {
 
     function repay(SeniorStateStore storage store, address repayer, uint256 assets) internal {
         require(assets <= store.totalBorrows, "SeniorVaultImp::EXCEEDS_TOTAL_BORROWS");
-        transferIn(store, assets);
         store.totalBorrows -= assets;
         store.borrows[repayer] -= assets;
-
+        transferIn(store, assets);
         emit Repay(assets, repayer);
     }
 
     function transferIn(SeniorStateStore storage store, uint256 assets) internal {
-        uint256 balance = IERC20Upgradeable(store.asset.asset).balanceOf(address(this));
+        uint256 balance = IERC20Upgradeable(store.asset).balanceOf(address(this));
         uint256 delta = balance - store.previousBalance;
         require(delta >= assets, "SeniorVaultImp::INSUFFICENT_ASSETS");
+        store.totalAssets += assets;
         store.previousBalance = balance;
-        store.asset.increaseAssets(assets);
-
         emit TransferIn(assets);
     }
 
@@ -175,10 +150,10 @@ library SeniorVaultImp {
         uint256 assets,
         address receiver
     ) internal {
-        IERC20Upgradeable(store.asset.asset).safeTransfer(receiver, assets);
-        store.previousBalance = IERC20Upgradeable(store.asset.asset).balanceOf(address(this));
-        store.asset.decreaseAssets(assets);
-
+        require(assets <= store.totalAssets, "SeniorVaultImp::INSUFFICENT_ASSETS");
+        IERC20Upgradeable(store.asset).safeTransfer(receiver, assets);
+        store.totalAssets -= assets;
+        store.previousBalance = IERC20Upgradeable(store.asset).balanceOf(address(this));
         emit TransferOut(assets, receiver);
     }
 
@@ -186,13 +161,52 @@ library SeniorVaultImp {
         SeniorStateStore storage store,
         address receiver
     ) internal returns (uint256 unlockTime) {
-        uint256 lockType = store.config.getUint256(LOCK_TYPE);
         uint256 lockPeriod = store.config.getUint256(LOCK_PERIOD);
-        if (lockType == uint256(LockType.None)) {
-            unlockTime = store.timelocks[receiver];
+        unlockTime = block.timestamp + lockPeriod;
+        store.timelocks[receiver] = unlockTime;
+    }
+
+    function update(
+        SeniorStateStore storage store,
+        address from,
+        address to,
+        uint256 amount
+    ) internal {
+        if (from == address(0)) {
+            store.totalSupply += amount;
         } else {
-            unlockTime = block.timestamp + lockPeriod;
-            store.timelocks[receiver] = unlockTime;
+            uint256 fromBalance = store.balances[from];
+            require(amount <= fromBalance, "ERC4626::EXCEEDED_BALANCE");
+            store.balances[from] = fromBalance - amount;
         }
+        if (to == address(0)) {
+            store.totalSupply -= amount;
+        } else {
+            store.balances[to] += amount;
+        }
+
+        emit Transfer(from, to, amount);
+    }
+
+    function retrieveDecimals(address asset) internal view returns (uint8) {
+        (bool success, bytes memory data) = address(asset).staticcall(
+            abi.encodeWithSignature("decimals()")
+        );
+        require(success, "SeniorVaultImp::FAILED_TO_GET_DECIMALS");
+        return abi.decode(data, (uint8));
+    }
+
+    function convertToShares(
+        SeniorStateStore storage store,
+        uint256 assets // assetDecimals
+    ) internal view returns (uint256 shares) {
+        shares = assets * (10 ** (18 - store.assetDecimals));
+    }
+
+    function convertToAssets(
+        SeniorStateStore storage store,
+        uint256 shares
+    ) internal view returns (uint256 assets) {
+        assets = shares / (10 ** (18 - store.assetDecimals));
     }
 }

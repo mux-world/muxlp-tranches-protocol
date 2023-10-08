@@ -101,19 +101,71 @@ contract RewardController is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         swapPaths[rewardToken_] = paths;
     }
 
-    function claimableRewards(
-        address account
-    ) external returns (uint256 seniorRewards, uint256 juniorRewards) {
-        seniorRewards = seniorRewardDistributor.claimable(account);
-        juniorRewards = juniorRewardDistributor.claimable(account);
+    function calculateRewardDistribution(
+        uint256 utilizedAmount,
+        uint256 rewardAmount,
+        uint256 timespan
+    ) public view returns (uint256 seniorRewards, uint256 juniorRewards) {
+        // noborrow
+        if (utilizedAmount == 0) {
+            seniorRewards = 0;
+            juniorRewards = rewardAmount;
+        } else {
+            // split rewards
+            // | ----------------- | ----------------- | ----------------- |
+            // 0               minStable            maxStable             total
+            //      => stable            stable * ratio        stable - max
+            uint256 minSeniorRewards = (((utilizedAmount * minSeniorApy) / ONE) * timespan) / YEAR;
+            seniorRewards = (rewardAmount * seniorRewardRate) / ONE;
+            juniorRewards = 0;
+            // if minSeniorApy applied
+            if (minSeniorApy > 0) {
+                if (rewardAmount <= minSeniorRewards) {
+                    seniorRewards = rewardAmount;
+                    juniorRewards = 0;
+                } else {
+                    //  max(minSeniorApy * utilizedAmount * timespan / 365, rewardAmount * seniorRewardRate)
+                    if (seniorRewards < minSeniorRewards) {
+                        seniorRewards = minSeniorRewards;
+                    }
+                    juniorRewards = rewardAmount - seniorRewards;
+                }
+            }
+            if (maxSeniorApy > 0) {
+                // if maxSeniorApy applied
+                // min(maxSeniorApy * utilizedAmount * timespan / 365, rewardAmount * seniorRewardRate)
+                uint256 maxSeniorRewards = (((utilizedAmount * maxSeniorApy) / ONE) * timespan) /
+                    YEAR;
+                if (seniorRewards > maxSeniorRewards) {
+                    seniorRewards = maxSeniorRewards;
+                    juniorRewards = rewardAmount - seniorRewards;
+                }
+            }
+        }
     }
 
-    function claimRewardFor(
+    // Get claimable rewards for senior/junior. Should call RouterV1.updateRewards() first to collected all rewards.
+    function claimableJuniorRewards(address account) external returns (uint256) {
+        return juniorRewardDistributor.claimable(account);
+    }
+
+    function claimableSeniorRewards(address account) external returns (uint256) {
+        return seniorRewardDistributor.claimable(account);
+    }
+
+    // Claim rewards for senior/junior. Should call RouterV1.updateRewards() first to collected all rewards.
+    function claimJuniorRewardsFor(
         address account,
         address receiver
-    ) external onlyHandler returns (uint256 seniorRewards, uint256 juniorRewards) {
-        seniorRewards = seniorRewardDistributor.claimFor(account, receiver);
-        juniorRewards = juniorRewardDistributor.claimFor(account, receiver);
+    ) external onlyHandler returns (uint256) {
+        return juniorRewardDistributor.claimFor(account, receiver);
+    }
+
+    function claimSeniorRewardsFor(
+        address account,
+        address receiver
+    ) external onlyHandler returns (uint256) {
+        return seniorRewardDistributor.claimFor(account, receiver);
     }
 
     function updateRewards(address account) external {
@@ -142,7 +194,7 @@ contract RewardController is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         uint256 timespan = block.timestamp - lastNotifyTime;
         lastNotifyTime = block.timestamp;
 
-        (uint256 seniorRewards, uint256 juniorRewards) = _calculateRewardDistribution(
+        (uint256 seniorRewards, uint256 juniorRewards) = calculateRewardDistribution(
             utilizedAmount,
             rewardAmount,
             timespan
@@ -205,48 +257,5 @@ contract RewardController is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         });
         IERC20Upgradeable(tokenIn).approve(address(uniswapRouter), amountIn);
         outAmount = uniswapRouter.exactInput(params);
-    }
-
-    function _calculateRewardDistribution(
-        uint256 utilizedAmount,
-        uint256 rewardAmount,
-        uint256 timespan
-    ) internal view returns (uint256 seniorRewards, uint256 juniorRewards) {
-        // noborrow
-        if (utilizedAmount == 0) {
-            seniorRewards = 0;
-            juniorRewards = rewardAmount;
-        } else {
-            // split rewards
-            // | ----------------- | ----------------- | ----------------- |
-            // 0               minStable            maxStable             total
-            //      => stable            stable * ratio        stable - max
-            uint256 minSeniorRewards = (((utilizedAmount * minSeniorApy) / ONE) * timespan) / YEAR;
-            seniorRewards = (rewardAmount * seniorRewardRate) / ONE;
-            juniorRewards = 0;
-            // if minSeniorApy applied
-            if (minSeniorApy > 0) {
-                if (rewardAmount <= minSeniorRewards) {
-                    seniorRewards = rewardAmount;
-                    juniorRewards = 0;
-                } else {
-                    //  max(minSeniorApy * utilizedAmount * timespan / 365, rewardAmount * seniorRewardRate)
-                    if (seniorRewards < minSeniorRewards) {
-                        seniorRewards = minSeniorRewards;
-                    }
-                    juniorRewards = rewardAmount - seniorRewards;
-                }
-            }
-            if (maxSeniorApy > 0) {
-                // if maxSeniorApy applied
-                // min(maxSeniorApy * utilizedAmount * timespan / 365, rewardAmount * seniorRewardRate)
-                uint256 maxSeniorRewards = (((utilizedAmount * maxSeniorApy) / ONE) * timespan) /
-                    YEAR;
-                if (seniorRewards > maxSeniorRewards) {
-                    seniorRewards = maxSeniorRewards;
-                    juniorRewards = rewardAmount - seniorRewards;
-                }
-            }
-        }
     }
 }

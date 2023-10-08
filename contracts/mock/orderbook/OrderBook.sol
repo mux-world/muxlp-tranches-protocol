@@ -113,31 +113,6 @@ contract OrderBook is Storage, Admin, ReentrancyGuardUpgradeable {
         }
     }
 
-    // A deprecated interface that will be removed in the next release.
-    function placePositionOrder2(
-        bytes32 subAccountId,
-        uint96 collateralAmount, // erc20.decimals
-        uint96 size, // 1e18
-        uint96 price, // 1e18
-        uint8 profitTokenId,
-        uint8 flags,
-        uint32 deadline, // 1e0
-        bytes32 referralCode
-    ) public payable nonReentrant {
-        PositionOrderExtra memory extra;
-        placePositionOrder3(
-            subAccountId,
-            collateralAmount,
-            size,
-            price,
-            profitTokenId,
-            flags,
-            deadline,
-            referralCode,
-            extra
-        );
-    }
-
     /**
      * @notice Open/close position. called by Trader.
      *
@@ -179,12 +154,7 @@ contract OrderBook is Storage, Admin, ReentrancyGuardUpgradeable {
             // otherwise only account owner can place order
             require(accountOwner == msgSender, "SND"); // SeNDer is not authorized
         }
-        if (referralCode != bytes32(0) && _storage.referralManager != address(0)) {
-            // IReferralManager(_storage.referralManager).setReferrerCodeFor(
-            //     accountOwner,
-            //     referralCode
-            // );
-        }
+        if (referralCode != bytes32(0) && _storage.referralManager != address(0)) {}
         LibOrderBook.placePositionOrder(
             _storage,
             _blockTimestamp(),
@@ -195,38 +165,6 @@ contract OrderBook is Storage, Admin, ReentrancyGuardUpgradeable {
             profitTokenId,
             flags,
             deadline,
-            extra
-        );
-    }
-
-    /**
-     * @dev    Update a position-order. called by Trader.
-     *
-     *         Internally this function will cancel the old order and place a new order.
-     * @param  orderId            order id.
-     * @param  collateralAmount   only available for a close-position-order. withdraw collateral after close. decimals = erc20.decimals.
-     * @param  size               position size. decimals = 18.
-     * @param  price              limit price. decimals = 18.
-     * @param  deadline           a unix timestamp after which the limit/trigger order MUST NOT be filled. fill 0 for market order.
-     * @param  extra              more strategy like tp/sl.
-     */
-    function updatePositionOrder(
-        uint64 orderId,
-        uint96 collateralAmount, // erc20.decimals
-        uint96 size, // 1e18
-        uint96 price, // 1e18
-        uint32 deadline, // 1e0
-        PositionOrderExtra memory extra
-    ) external whenPositionOrderEnabled nonReentrant {
-        LibOrderBook.updatePositionOrder(
-            _storage,
-            _msgSender(),
-            _blockTimestamp(),
-            orderId,
-            collateralAmount, // erc20.decimals
-            size, // 1e18
-            price, // 1e18
-            deadline, // 1e0
             extra
         );
     }
@@ -364,6 +302,7 @@ contract OrderBook is Storage, Admin, ReentrancyGuardUpgradeable {
         } else {
             tradingPrice = LibOrderBook.fillClosePositionOrder(
                 _storage,
+                _blockTimestamp(),
                 orderId,
                 collateralPrice,
                 assetPrice,
@@ -372,7 +311,7 @@ contract OrderBook is Storage, Admin, ReentrancyGuardUpgradeable {
             );
         }
         // price check
-        if (!order.isMarketOrder() && tradingPrice > 0) {
+        if (!order.isMarketOrder()) {
             // open,long      0,0   0,1   1,1   1,0
             // limitOrder     <=    >=    <=    >=
             // triggerOrder   >=    <=    >=    <=
@@ -430,26 +369,30 @@ contract OrderBook is Storage, Admin, ReentrancyGuardUpgradeable {
         }
         OrderType orderType = LibOrder.getOrderType(orderData);
         require(orderType == OrderType.LiquidityOrder, "TYP"); // order TYPe mismatch
-        uint256 mlpAmount = LibOrderBook.fillLiquidityOrder(
-            _storage,
-            _blockTimestamp(),
-            assetPrice,
-            mlpPrice,
-            currentAssetValue,
-            targetAssetValue,
-            orderData
-        );
+        uint256 mlpAmount;
+        if (order.rawAmount != 0) {
+            mlpAmount = LibOrderBook.fillLiquidityOrder(
+                _storage,
+                _blockTimestamp(),
+                assetPrice,
+                mlpPrice,
+                currentAssetValue,
+                targetAssetValue,
+                orderData
+            );
+        } else {
+            require(_storage.callbackWhitelist[order.account], "NCB");
+            mlpAmount = 0;
+        }
         if (_storage.callbackWhitelist[order.account]) {
-            try
-                ILiquidityCallback(order.account).afterFillLiquidityOrder{gas: _callbackGasLimit()}(
-                    order,
-                    mlpAmount,
-                    assetPrice,
-                    mlpPrice,
-                    currentAssetValue,
-                    targetAssetValue
-                )
-            {} catch {}
+            ILiquidityCallback(order.account).afterFillLiquidityOrder{gas: _callbackGasLimit()}(
+                order,
+                mlpAmount,
+                assetPrice,
+                mlpPrice,
+                currentAssetValue,
+                targetAssetValue
+            );
         }
         emit FillOrder(orderId, orderType, orderData);
     }

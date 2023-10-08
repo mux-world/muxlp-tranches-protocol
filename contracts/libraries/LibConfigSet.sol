@@ -3,6 +3,10 @@ pragma solidity 0.8.17;
 
 import "./LibTypeCast.sol";
 
+struct ConfigSet {
+    mapping(bytes32 => bytes32) values;
+}
+
 library LibConfigSet {
     using LibTypeCast for bytes32;
     using LibTypeCast for address;
@@ -11,10 +15,6 @@ library LibConfigSet {
 
     event SetValue(bytes32 key, bytes32 value);
     error InvalidAddress(bytes32 key);
-
-    struct ConfigSet {
-        mapping(bytes32 => bytes32) values;
-    }
 
     // ================================== single functions ======================================
     function setBytes32(ConfigSet storage store, bytes32 key, bytes32 value) internal {

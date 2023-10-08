@@ -40,7 +40,7 @@ interface ISeniorVault {
 
     function convertToAssets(uint256 shares) external view returns (uint256 assets);
 
-    function lockStatus(address owner) external view returns (LockType lockType, bool isLocked);
+    function timelock(address owner) external view returns (uint256 unlockTime);
 
     function deposit(uint256 assets, address receiver) external returns (uint256 shares);
 

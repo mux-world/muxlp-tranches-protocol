@@ -28,10 +28,6 @@ contract SeniorConfig {
         seniorVault = IConfigurable(configurable_);
     }
 
-    function lockType() public view virtual returns (LockType) {
-        return LockType(seniorVault.getConfig(LOCK_TYPE).toUint256());
-    }
-
     function lockPeriod() public view virtual returns (uint256) {
         return seniorVault.getConfig(LOCK_PERIOD).toUint256();
     }
@@ -52,8 +48,8 @@ contract SeniorConfig {
         return seniorVault.getConfig(keccak256(abi.encode(MAX_BORROWS, vault))).toUint256();
     }
 
-    function setLockType(LockType lockType_) public virtual onlyAdmin {
-        seniorVault.setConfig(LOCK_TYPE, uint256(lockType_).toBytes32());
+    function assetSupplyCap() public view virtual returns (uint256) {
+        return seniorVault.getConfig(ASSET_SUPPLY_CAP).toUint256();
     }
 
     function setLockPeriod(uint256 lockPeriod_) public virtual onlyAdmin {
@@ -76,5 +72,9 @@ contract SeniorConfig {
 
     function setMaxBorrowsByVault(address vault, uint256 maxBorrows_) public virtual onlyAdmin {
         seniorVault.setConfig(keccak256(abi.encode(MAX_BORROWS, vault)), maxBorrows_.toBytes32());
+    }
+
+    function setAssetSupplyCap(uint256 newAssetCap) public virtual onlyAdmin {
+        seniorVault.setConfig(ASSET_SUPPLY_CAP, newAssetCap.toBytes32());
     }
 }

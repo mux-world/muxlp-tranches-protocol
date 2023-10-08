@@ -57,17 +57,25 @@ contract JuniorConfig {
         return juniorVault.getConfig(MUX_LIQUIDITY_POOL).toAddress();
     }
 
+    function assetSupplyCap() public view virtual returns (uint256) {
+        return juniorVault.getConfig(ASSET_SUPPLY_CAP).toUint256();
+    }
+
     function setMuxRewardRouter(address muxRewardRouter_) public virtual onlyAdmin {
         IMuxRewardRouter router = IMuxRewardRouter(muxRewardRouter_);
         juniorVault.setConfig(MUX_REWARD_ROUTER, muxRewardRouter_.toBytes32());
         juniorVault.setConfig(WETH_TOKEN, router.weth().toBytes32());
-        juniorVault.setConfig(MLP_TOKEN, router.mlp().toBytes32());
         juniorVault.setConfig(SMLP_TOKEN, router.mlpMuxTracker().toBytes32());
+        juniorVault.setConfig(MLP_TOKEN, router.mlp().toBytes32());
         juniorVault.setConfig(MUX_TOKEN, router.mux().toBytes32());
         juniorVault.setConfig(MCB_TOKEN, router.mcb().toBytes32());
     }
 
     function setMuxLiquidityPool(address muxLiquidityPool_) public virtual onlyAdmin {
         juniorVault.setConfig(MUX_LIQUIDITY_POOL, muxLiquidityPool_.toBytes32());
+    }
+
+    function setAssetSupplyCap(uint256 newAssetCap) public virtual onlyAdmin {
+        juniorVault.setConfig(ASSET_SUPPLY_CAP, newAssetCap.toBytes32());
     }
 }

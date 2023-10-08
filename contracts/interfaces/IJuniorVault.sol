@@ -30,7 +30,7 @@ interface IJuniorVault {
         uint256 seniorPrice
     ) external view returns (uint256);
 
-    function deposit(uint256 assets, address receiver) external returns (uint256 shares);
+    function deposit(uint256 assets, uint256 shares, address receiver) external returns (uint256);
 
     function withdraw(
         address caller,
@@ -39,9 +39,7 @@ interface IJuniorVault {
         address receiver
     ) external returns (uint256 assets);
 
-    function collectRewards(address owner) external;
-
-    function adjustVesting() external;
+    function collectMuxRewards(address owner) external;
 
     function transferIn(uint256 assets) external;
 
