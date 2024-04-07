@@ -157,8 +157,4 @@ contract JuniorVault is
     function transferOut(uint256 assets) external onlyRole(HANDLER_ROLE) {
         _store.transferOut(assets, msg.sender);
     }
-
-    function debugWithdraw(uint256 unstake, uint256 withdrawal) external {
-        _store.debugWithdraw(unstake, withdrawal);
-    }
 }

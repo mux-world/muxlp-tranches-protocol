@@ -257,25 +257,10 @@ describe("Config", async () => {
 
     // junior deposit +100
     await mlp.connect(alice).approve(router.address, toWei("100"));
-    await router.connect(alice).depositJunior(toWei("100"));
-    await fillOrder();
-    expect(await junior.balanceOf(alice.address)).to.be.closeTo(toWei("200"), 1000);
-
-    expect(await mlp.balanceOf(alice.address)).to.equal(toWei("800"));
-    await mlp.connect(alice).approve(router.address, toWei("1"));
-    await router.connect(alice).depositJunior(toWei("1"));
-    expect(await mlp.balanceOf(alice.address)).to.equal(toWei("799"));
-    await expect(fillOrder()).to.be.revertedWith("EXCEEDS_SUPPLY_CAP");
-
-    var users = await router.getPendingUsers(0, 100);
-    expect(users.length).to.equal(1);
-    expect(users[0]).to.equal(alice.address);
-    var userStates = await router.getUserStates(users[0]);
-    expect(userStates.status).to.equal(1);
-
-    await router.connect(alice).cancelPendingOperation();
-    var users = await router.getPendingUsers(0, 100);
-    expect(users.length).to.equal(0);
-    expect(await mlp.balanceOf(alice.address)).to.equal(toWei("800"));
+    await expect(router.connect(alice).depositJunior(toWei("100"))).to.be.revertedWith(
+      "EXCEEDS_SUPPLY_CAP"
+    );
+    // junior deposit +90 ======> (200 - 100 * 1.1) / 1.1
+    await router.connect(alice).depositJunior(toWei("81"));
   });
 });

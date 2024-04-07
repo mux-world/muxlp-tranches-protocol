@@ -87,12 +87,24 @@ contract RouterV1 is
         return _store.pendingJuniorAssets;
     }
 
+    function pendingSeniorShares() external view returns (uint256) {
+        return _store.pendingSeniorShares;
+    }
+
+    function pendingBorrowAssets() external view returns (uint256) {
+        return _store.pendingBorrowAssets;
+    }
+
     function pendingSeniorAssets() external view returns (uint256) {
         return _store.pendingSeniorAssets;
     }
 
     function pendingRefundAssets() external view returns (uint256) {
         return _store.pendingRefundAssets;
+    }
+
+    function pendingJuniorDeposits() external view returns (uint256) {
+        return _store.pendingJuniorDeposits;
     }
 
     function juniorNavPerShare(
@@ -111,12 +123,12 @@ contract RouterV1 is
     }
 
     function claimableJuniorRewards(address account) external returns (uint256) {
-        _store.updateRewards();
+        _store.updateRewards(account);
         return _store.rewardController.claimableJuniorRewards(account);
     }
 
     function claimableSeniorRewards(address account) external returns (uint256) {
-        _store.updateRewards();
+        _store.updateRewards(account);
         return _store.rewardController.claimableSeniorRewards(account);
     }
 
@@ -124,20 +136,24 @@ contract RouterV1 is
 
     // Idle => DepositJunior => Idle
     function depositJunior(uint256 assets) external checkStatus nonReentrant {
+        _store.updateRewards(msg.sender);
         _store.depositJunior(msg.sender, assets);
     }
 
     // Idle => WithdrawJunior => Idle
     function withdrawJunior(uint256 shares) external checkStatus nonReentrant {
+        _store.updateRewards(msg.sender);
         _store.withdrawJunior(msg.sender, shares);
     }
 
     function depositSenior(uint256 amount) external checkStatus nonReentrant {
+        _store.updateRewards(msg.sender);
         _store.depositSenior(msg.sender, amount);
     }
 
     // Idle => WithdrawSenior => RefundJunior => Idle
     function withdrawSenior(uint256 amount, bool acceptPenalty) external checkStatus nonReentrant {
+        _store.updateRewards(msg.sender);
         _store.withdrawSenior(msg.sender, amount, acceptPenalty);
     }
 
@@ -146,12 +162,14 @@ contract RouterV1 is
         uint256 seniorPrice,
         uint256 juniorPrice
     ) external checkStatus onlyRole(KEEPER_ROLE) {
+        _store.updateRewards(address(0));
         _store.rebalance(seniorPrice, juniorPrice);
     }
 
     // Idle => SellJunior => Idle
     function liquidate(uint256 seniorPrice, uint256 juniorPrice) external onlyRole(KEEPER_ROLE) {
         require(!_store.isLiquidated, "RouterV1::LIQUIDATED");
+        _store.updateRewards(address(0));
         _store.liquidate(seniorPrice, juniorPrice);
     }
 
@@ -167,16 +185,17 @@ contract RouterV1 is
     }
 
     function cancelPendingOperation() external {
+        _store.updateRewards(msg.sender);
         _store.cancelPendingOperation(msg.sender);
     }
 
     function claimJuniorRewards() external returns (uint256) {
-        _store.updateRewards();
+        _store.updateRewards(msg.sender);
         return _store.rewardController.claimJuniorRewardsFor(msg.sender, msg.sender);
     }
 
     function claimSeniorRewards() external nonReentrant returns (uint256) {
-        _store.updateRewards();
+        _store.updateRewards(msg.sender);
         return _store.rewardController.claimSeniorRewardsFor(msg.sender, msg.sender);
     }
 

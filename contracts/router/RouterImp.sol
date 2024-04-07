@@ -87,9 +87,7 @@ library RouterImp {
     ) internal view returns (uint256) {
         uint256 juniorTotalShares = store.juniorTotalSupply();
         uint256 juniorTotalValues = store.juniorTotalAssets() * juniorPrice;
-        uint256 juniorTotalBorrows = store.toJuniorUnit(
-            store.seniorVault.borrows(address(this)) - store.pendingBorrowAssets
-        ) * seniorPrice;
+        uint256 juniorTotalBorrows = store.toJuniorUnit(store.seniorBorrows()) * seniorPrice;
 
         // console.log("juniorNavPerShare");
         // console.log("----------------------------------------------");
@@ -112,9 +110,7 @@ library RouterImp {
     ) internal view returns (uint256 leverage) {
         require(juniorPrice != 0, "RouterImp::INVALID_PRICE");
         require(seniorPrice != 0, "RouterImp::INVALID_PRICE");
-        uint256 juniorTotalBorrows = store.toJuniorUnit(
-            store.seniorVault.borrows(address(this)) - store.pendingBorrowAssets
-        ) * seniorPrice;
+        uint256 juniorTotalBorrows = store.toJuniorUnit(store.seniorBorrows()) * seniorPrice;
         if (juniorTotalBorrows == 0) {
             return ONE;
         }
@@ -139,9 +135,7 @@ library RouterImp {
         require(targetLeverage > ONE, "RouterImp::INVALID_LEVERAGE");
         uint256 threshold = store.config.getUint256(REBALANCE_THRESHOLD);
         uint256 assetUsd = (store.juniorTotalAssets() * juniorPrice) / ONE;
-        uint256 borrowUsd = (store.toJuniorUnit(
-            store.seniorVault.borrows(address(this)) - store.pendingBorrowAssets
-        ) * seniorPrice) / ONE;
+        uint256 borrowUsd = (store.toJuniorUnit(store.seniorBorrows()) * seniorPrice) / ONE;
         if (assetUsd > borrowUsd) {
             uint256 principleUsd = assetUsd - borrowUsd;
             uint256 targetBorrowUsd = (principleUsd * (targetLeverage - ONE)) / ONE;
@@ -159,6 +153,10 @@ library RouterImp {
 
     function updateRewards(RouterStateStore storage store) public {
         store.updateRewards(address(0));
+    }
+
+    function updateRewards(RouterStateStore storage store, address account) public {
+        store.updateRewards(account);
     }
 
     function rebalance(

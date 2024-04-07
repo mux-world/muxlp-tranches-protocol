@@ -21,4 +21,10 @@ library RouterUtilImp {
             juniorUnitAmount /
             (10 ** (store.juniorVault.assetDecimals() - store.seniorVault.assetDecimals()));
     }
+
+    function seniorBorrows(
+        RouterStateStore storage store
+    ) internal view returns (uint256 seniorBorrowsAmount) {
+        seniorBorrowsAmount = store.seniorVault.borrows(address(this)) - store.pendingBorrowAssets;
+    }
 }

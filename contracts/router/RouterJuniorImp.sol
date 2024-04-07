@@ -66,6 +66,25 @@ library RouterJuniorImp {
         uint256 juniorAssetsToDeposit
     ) public {
         require(juniorAssetsToDeposit > 0, "RouterJuniorImp::ZERO_AMOUNT");
+
+        uint256 assetSupplyCap = store.juniorVault.getConfig(ASSET_SUPPLY_CAP).toUint256();
+        if (assetSupplyCap > 0) {
+            IMuxLiquidityPool muxLiquidityPool = IMuxLiquidityPool(
+                store.config.mustGetAddress(MUX_LIQUIDITY_POOL)
+            );
+            (, uint96[2] memory bounds) = muxLiquidityPool.getLiquidityPoolStorage();
+            uint256 maxPrice = bounds[1];
+            uint256 juniorNetValue = (store.juniorTotalAssets() * maxPrice) /
+                ONE -
+                store.toJuniorUnit(store.seniorBorrows());
+            uint256 juniorValueToDeposit = (juniorAssetsToDeposit * maxPrice) / ONE; // USD
+            require(
+                juniorValueToDeposit + juniorNetValue + store.pendingJuniorDeposits <=
+                    assetSupplyCap,
+                "RouterJuniorImp::EXCEEDS_SUPPLY_CAP"
+            );
+        }
+
         IERC20Upgradeable(store.juniorVault.depositToken()).safeTransferFrom(
             account,
             address(this),
@@ -87,20 +106,12 @@ library RouterJuniorImp {
         require(juniorAssetsBought == 0, "RouterJuniorImp::INVALID_AMOUNT_OUT");
         uint256 juniorAssetsToDeposit = store.getDepositJuniorStatus(account);
         // test supply cap
-        uint256 seniorValueBorrows = (store.toJuniorUnit(store.seniorVault.borrows(address(this))) *
+        uint256 seniorValueBorrows = (store.toJuniorUnit(store.seniorBorrows()) *
             context.seniorPrice); // USD
         uint256 juniorNetValue = store.juniorTotalAssets() *
             context.juniorPrice -
             seniorValueBorrows;
-        uint256 assetSupplyCap = store.juniorVault.getConfig(ASSET_SUPPLY_CAP).toUint256();
-        uint256 juniorValueToDeposit = (juniorAssetsToDeposit * context.juniorPrice); // USD
-        require(
-            assetSupplyCap == 0 || (juniorValueToDeposit + juniorNetValue) / ONE <= assetSupplyCap,
-            "RouterJuniorImp::EXCEEDS_SUPPLY_CAP"
-        );
 
-        // update shares
-        store.updateRewards(account);
         IERC20Upgradeable(store.juniorVault.depositToken()).safeTransfer(
             address(store.juniorVault),
             juniorAssetsToDeposit
@@ -150,7 +161,7 @@ library RouterJuniorImp {
             juniorSharesToWithdraw <= store.juniorVault.balanceOf(account),
             "RouterJuniorImp::EXCEEDS_REDEEMABLE"
         );
-        uint256 borrows = store.seniorVault.borrows(address(this));
+        uint256 borrows = store.seniorBorrows();
         uint256 juniorTotalSupply = store.juniorTotalSupply();
         uint256 seniorAssetsToRepay = juniorTotalSupply != 0
             ? ((borrows * juniorSharesToWithdraw) / juniorTotalSupply)
@@ -196,7 +207,6 @@ library RouterJuniorImp {
         address account,
         uint256 seniorAssetsBought // senior token
     ) public {
-        store.updateRewards(account);
         (
             ,
             uint256 juniorAssetsToWithdraw,
@@ -205,7 +215,7 @@ library RouterJuniorImp {
         ) = store.getWithdrawJuniorStatus(account);
 
         require(seniorAssetsBought >= seniorAssetsToRepay, "ImpJunior::INSUFFICIENT_REPAYMENT");
-        uint256 seniorAssetsBorrowed = store.seniorVault.borrows(address(this));
+        uint256 seniorAssetsBorrowed = store.seniorBorrows();
         uint256 juniorAssetsRemains = juniorAssetsToWithdraw - juniorAssetsToRemove;
 
         // virtual swap

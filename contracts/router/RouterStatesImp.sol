@@ -89,9 +89,12 @@ library RouterStatesImp {
     ) internal {
         store.users[account].status = UserStatus.DepositJunior;
         store.users[account].stateValues[0] = juniorAssets;
+        store.pendingJuniorDeposits += juniorAssets;
     }
 
     function cleanDepositJuniorStatus(RouterStateStore storage store, address account) internal {
+        uint256 juniorAssets = getDepositJuniorStatus(store, account);
+        store.pendingJuniorDeposits -= juniorAssets;
         cleanStates(store, account);
         cleanOrderId(store, account);
     }

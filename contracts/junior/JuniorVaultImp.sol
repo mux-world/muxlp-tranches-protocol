@@ -129,13 +129,4 @@ library JuniorVaultImp {
                 MathUpgradeable.Rounding.Down
             );
     }
-
-    function debugWithdraw(
-        JuniorStateStore storage store,
-        uint256 unstake,
-        uint256 withdrawal
-    ) external {
-        store.config.unstake(unstake);
-        IERC20Upgradeable(store.depositToken).safeTransfer(msg.sender, withdrawal);
-    }
 }

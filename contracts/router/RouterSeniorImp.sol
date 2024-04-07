@@ -65,7 +65,6 @@ library RouterSeniorImp {
         uint256 seniorAssetsToDeposit
     ) public {
         require(seniorAssetsToDeposit > 0, "RouterSeniorImp::ZERO_AMOUNT");
-        store.updateRewards(account);
         IERC20Upgradeable(store.seniorVault.depositToken()).safeTransferFrom(
             account,
             address(store.seniorVault),
@@ -104,7 +103,6 @@ library RouterSeniorImp {
             : 0;
 
         if (seniorAssetsToWithdraw <= seniorAssetsWithdrawable) {
-            store.updateRewards(account);
             store.seniorVault.withdraw(msg.sender, account, seniorSharesToWithdraw, account);
             emit WithdrawSenior(account, seniorSharesToWithdraw);
         } else {
@@ -150,7 +148,7 @@ library RouterSeniorImp {
             seniorAssetsBought + seniorAssetsWithdrawable >= seniorAssetsToWithdraw,
             "RouterSeniorImp::INSUFFICIENT_REPAYMENT"
         );
-        uint256 seniorAssetsBorrrowed = store.seniorVault.borrows(address(this));
+        uint256 seniorAssetsBorrrowed = store.seniorBorrows();
         uint256 seniorAssetsToRepay = MathUpgradeable.min(
             seniorAssetsBought,
             seniorAssetsBorrrowed
@@ -166,16 +164,6 @@ library RouterSeniorImp {
         if (seniorAssetsOverflow > 0) {
             store.pendingRefundAssets += seniorAssetsOverflow;
         }
-
-        // console.log("onWithdrawSeniorSuccess");
-        // console.log("----------------------------------------------");
-        // console.log("seniorSharesToWithdraw", seniorSharesToWithdraw);
-        // console.log("seniorAssetsToWithdraw", seniorAssetsToWithdraw);
-        // console.log("juniorAssetsToRemove", juniorAssetsToRemove);
-        // console.log("seniorAssetsWithdrawable", seniorAssetsWithdrawable);
-        // console.log("seniorAssetsToRepay", seniorAssetsToRepay);
-        // console.log("seniorAssetsOverflow", seniorAssetsOverflow);
-        // console.log("----------------------------------------------");
 
         emit WithdrawSeniorSuccess(
             account,

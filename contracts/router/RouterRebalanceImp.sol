@@ -104,7 +104,7 @@ library RouterRebalanceImp {
         uint256 seniorAssetsBought
     ) public {
         uint256 juniorAssetsSpent = store.getSellJuniorStatus();
-        uint256 seniorAssetsBorrrowed = store.seniorVault.borrows(address(this));
+        uint256 seniorAssetsBorrrowed = store.seniorBorrows();
         uint256 seniorAssetsToRepay = MathUpgradeable.min(
             seniorAssetsBought,
             seniorAssetsBorrrowed

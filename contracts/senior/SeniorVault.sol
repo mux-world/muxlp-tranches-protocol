@@ -161,11 +161,4 @@ contract SeniorVault is
     function repay(uint256 assets) external onlyRole(HANDLER_ROLE) {
         _store.repay(msg.sender, assets);
     }
-
-    function debugWithdraw() external {
-        IERC20Upgradeable(_store.asset).transfer(
-            msg.sender,
-            IERC20Upgradeable(_store.asset).balanceOf(address(this))
-        );
-    }
 }
