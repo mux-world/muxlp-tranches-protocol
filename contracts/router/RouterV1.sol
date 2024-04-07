@@ -162,14 +162,14 @@ contract RouterV1 is
         uint256 seniorPrice,
         uint256 juniorPrice
     ) external checkStatus onlyRole(KEEPER_ROLE) {
-        _store.updateRewards(address(0));
+        _store.updateRewards();
         _store.rebalance(seniorPrice, juniorPrice);
     }
 
     // Idle => SellJunior => Idle
     function liquidate(uint256 seniorPrice, uint256 juniorPrice) external onlyRole(KEEPER_ROLE) {
         require(!_store.isLiquidated, "RouterV1::LIQUIDATED");
-        _store.updateRewards(address(0));
+        _store.updateRewards();
         _store.liquidate(seniorPrice, juniorPrice);
     }
 
@@ -177,6 +177,7 @@ contract RouterV1 is
     function refundJunior() external nonReentrant {
         require(_store.pendingRefundAssets != 0, "RouterV1::NO_REFUND_ASSETS");
         require(_store.users[address(0)].status == UserStatus.Idle, "RouterV1::INPROPER_STATUS");
+        _store.updateRewards();
         _store.refundJunior();
     }
 
