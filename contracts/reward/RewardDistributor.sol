@@ -67,6 +67,7 @@ contract RewardDistributor is ReentrancyGuardUpgradeable, OwnableUpgradeable {
 
     // Claim rewards for senior/junior. Should call RouterV1.updateRewards() first to collected all rewards.
     function claim(address _receiver) external nonReentrant returns (uint256) {
+        require(lastClaimTime[_receiver] != block.timestamp, "RewardDistributor::ALREADY_CLAIMED");
         return _claim(msg.sender, _receiver);
     }
 
