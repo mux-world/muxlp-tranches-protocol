@@ -71,6 +71,7 @@ contract SeniorConfig {
     }
 
     function setMaxBorrowsByVault(address vault, uint256 maxBorrows_) public virtual onlyAdmin {
+        require(vault != address(0), "JuniorConfig::INVALID_ADDRESS");
         seniorVault.setConfig(keccak256(abi.encode(MAX_BORROWS, vault)), maxBorrows_.toBytes32());
     }
 
