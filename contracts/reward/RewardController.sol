@@ -40,6 +40,8 @@ contract RewardController is OwnableUpgradeable, ReentrancyGuardUpgradeable {
     event SetMaxStableApy(uint256 prevMaxApy, uint256 newMaxApy);
     event SetSeniorRewardRate(uint256 prevRation, uint256 newRation);
     event SetInitialTime(uint256 prevTime, uint256 newTime);
+    event SetUniswapContracts(address uniswapRouter, address uniswapQuoter);
+    event SetSwapPaths(address rewardToken, bytes[] paths);
 
     modifier onlyHandler() {
         require(isHandler[msg.sender], "RewardController::HANDLER_ONLY");
@@ -86,6 +88,7 @@ contract RewardController is OwnableUpgradeable, ReentrancyGuardUpgradeable {
     }
 
     function setInitialTime() external onlyOwner {
+        emit SetInitialTime(lastNotifyTime, block.timestamp);
         lastNotifyTime = block.timestamp;
     }
 
@@ -95,10 +98,12 @@ contract RewardController is OwnableUpgradeable, ReentrancyGuardUpgradeable {
     ) external onlyOwner {
         uniswapRouter = ISwapRouter(uniswapRouter_);
         uniswapQuoter = IQuoter(uniswapQuoter_);
+        emit SetUniswapContracts(uniswapRouter_, uniswapQuoter_);
     }
 
     function setSwapPaths(address rewardToken_, bytes[] memory paths) external onlyOwner {
         swapPaths[rewardToken_] = paths;
+        emit SetSwapPaths(rewardToken_, paths);
     }
 
     function calculateRewardDistribution(
