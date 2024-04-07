@@ -62,6 +62,7 @@ contract JuniorConfig {
     }
 
     function setMuxRewardRouter(address muxRewardRouter_) public virtual onlyAdmin {
+        require(muxRewardRouter_ != address(0), "JuniorConfig::INVALID_ADDRESS");
         IMuxRewardRouter router = IMuxRewardRouter(muxRewardRouter_);
         juniorVault.setConfig(MUX_REWARD_ROUTER, muxRewardRouter_.toBytes32());
         juniorVault.setConfig(WETH_TOKEN, router.weth().toBytes32());
@@ -72,6 +73,7 @@ contract JuniorConfig {
     }
 
     function setMuxLiquidityPool(address muxLiquidityPool_) public virtual onlyAdmin {
+        require(muxLiquidityPool_ != address(0), "JuniorConfig::INVALID_ADDRESS");
         juniorVault.setConfig(MUX_LIQUIDITY_POOL, muxLiquidityPool_.toBytes32());
     }
 
