@@ -48,7 +48,8 @@ struct RouterStateStore {
     mapping(uint64 => address) pendingOrders;
     EnumerableSetUpgradeable.AddressSet pendingUsers;
     uint256 pendingJuniorDeposits;
-    bytes32[19] __reserves;
+    mapping(address => bool) whitelist;
+    bytes32[18] __reserves;
 }
 
 struct MuxOrderContext {

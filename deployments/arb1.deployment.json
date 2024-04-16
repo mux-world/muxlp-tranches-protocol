@@ -43,43 +43,13 @@
     },
     "deployedAt": 192950969
   },
-  "RouterJuniorImp": {
-    "type": "plain",
-    "name": "RouterJuniorImp",
-    "address": "0xCAc02f0682e115E40B14b0858fC5bb3b40250632",
-    "deployedAt": 196460802
-  },
-  "RouterRebalanceImp": {
-    "type": "plain",
-    "name": "RouterRebalanceImp",
-    "address": "0x5EF6dBa854e0c759872c52c5563f7cC7Ee35c26b",
-    "deployedAt": 196460814
-  },
-  "RouterSeniorImp": {
-    "type": "plain",
-    "name": "RouterSeniorImp",
-    "address": "0x948f221C63704700Dc7ca8e301b6a58FA4C1c711",
-    "deployedAt": 196460827
-  },
-  "RouterImp": {
-    "type": "plain",
-    "name": "RouterImp",
-    "address": "0xe85941C6dBfFa7b2120257c2aF5D678f06f7E163",
-    "deployedAt": 196460791
-  },
-  "RouterV1__implementation": {
-    "type": "plain",
-    "name": "RouterV1__implementation",
-    "address": "0x214e2AA0723ffBB0196a6E9722A5ECd1cF18dD00",
-    "deployedAt": 196460839
-  },
   "RouterV1": {
     "type": "upgradeable",
     "name": "RouterV1",
     "address": "0x9B637AeE65106B1d55CEA5d560Fd0C67Ce1F18C5",
     "dependencies": {
       "admin": "0x2257dc42b363d611898057354c031a670934ed3f",
-      "implementation": "0x214e2AA0723ffBB0196a6E9722A5ECd1cF18dD00"
+      "implementation": "0xff2904A0494A4BBECa85e866a921c5A14C3F792C"
     },
     "deployedAt": 192951042
   },
@@ -142,5 +112,35 @@
     "name": "RouterConfig",
     "address": "0xf0d95EDAbB0CfA923B5d52BF4504Ac64df451C69",
     "deployedAt": 192951141
+  },
+  "RouterRebalanceImp": {
+    "type": "plain",
+    "name": "RouterRebalanceImp",
+    "address": "0x737Ecc015750906eBFdAD5CaAD27D54473bAA3B8",
+    "deployedAt": 199127626
+  },
+  "RouterSeniorImp": {
+    "type": "plain",
+    "name": "RouterSeniorImp",
+    "address": "0x1b61401c490eA13622608864A37fdB9Ae876Bf7f",
+    "deployedAt": 199127638
+  },
+  "RouterJuniorImp": {
+    "type": "plain",
+    "name": "RouterJuniorImp",
+    "address": "0x7C1A9Ed80D28b170100AB1a46D5352FF10488158",
+    "deployedAt": 199132735
+  },
+  "RouterImp": {
+    "type": "plain",
+    "name": "RouterImp",
+    "address": "0x986300ca8979034A2531DdB6795Dd6BA466C8251",
+    "deployedAt": 199132747
+  },
+  "RouterV1__implementation": {
+    "type": "plain",
+    "name": "RouterV1__implementation",
+    "address": "0xff2904A0494A4BBECa85e866a921c5A14C3F792C",
+    "deployedAt": 199132759
   }
 }

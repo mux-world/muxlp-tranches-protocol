@@ -88,14 +88,6 @@ library RouterImp {
         uint256 juniorTotalShares = store.juniorTotalSupply();
         uint256 juniorTotalValues = store.juniorTotalAssets() * juniorPrice;
         uint256 juniorTotalBorrows = store.toJuniorUnit(store.seniorBorrows()) * seniorPrice;
-
-        // console.log("juniorNavPerShare");
-        // console.log("----------------------------------------------");
-        // console.log("juniorTotalSupply", juniorTotalSupply);
-        // console.log("juniorTotalValue", juniorTotalValue);
-        // console.log("juniorTotalBorrowed", juniorTotalBorrowed);
-        // console.log("----------------------------------------------");
-
         if (juniorTotalValues > juniorTotalBorrows) {
             return (juniorTotalValues - juniorTotalBorrows) / juniorTotalShares;
         } else {
@@ -175,7 +167,14 @@ library RouterImp {
         // decimal 18 => decimals of senior asset
         if (isBorrow) {
             uint256 borrowable = store.seniorVault.borrowable(address(this));
+            if (borrowable > store.pendingSeniorAssets) {
+                borrowable -= store.pendingSeniorAssets;
+            } else {
+                borrowable = 0;
+            }
             uint256 toBorrow = MathUpgradeable.min(borrowable, delta);
+            // add a threshold to toBorrow
+            // avoid to buy too small amount juniors
             store.buyJunior(toBorrow);
         } else {
             // to wad

@@ -18,13 +18,18 @@ contract RouterV1 is
 {
     using RouterImp for RouterStateStore;
     using LibConfigSet for ConfigSet;
-    using EnumerableSetUpgradeable for EnumerableSetUpgradeable.UintSet;
+    using EnumerableSetUpgradeable for EnumerableSetUpgradeable.AddressSet;
 
-    modifier checkStatus() {
+    modifier notPending() {
         require(_store.users[msg.sender].status == UserStatus.Idle, "RouterV1::INPROPER_STATUS");
         require(_store.users[address(0)].status == UserStatus.Idle, "RouterV1::INPROPER_STATUS");
         require(_store.pendingRefundAssets == 0, "RouterV1::HAS_REFUND_ASSETS");
-        require(!_store.isLiquidated, "RouterV1::LIQUIDATING");
+        require(_store.pendingUsers.length() == 0, "RouterV1::PENDING_USERS");
+        _;
+    }
+
+    modifier notLiquidated() {
+        require(!_store.isLiquidated, "RouterV1::LIQUIDATED");
         _;
     }
 
@@ -36,6 +41,21 @@ contract RouterV1 is
         __AccessControlEnumerable_init();
         _store.initialize(seniorVault, juniorVault, rewardController);
         _grantRole(DEFAULT_ADMIN, msg.sender);
+    }
+
+    // =============================================== Whitelist ===============================================
+
+    modifier onlyWhitelisted() {
+        require(_store.whitelist[msg.sender], "JuniorVault::ONLY_WHITELISTED");
+        _;
+    }
+
+    function setWhitelist(address account, bool enable) external {
+        require(
+            hasRole(CONFIG_ROLE, msg.sender) || hasRole(DEFAULT_ADMIN, msg.sender),
+            "JuniorVault::ONLY_AUTHRIZED_ROLE"
+        );
+        _store.whitelist[account] = enable;
     }
 
     // =============================================== Configs ===============================================
@@ -56,12 +76,31 @@ contract RouterV1 is
         return _store.users[account];
     }
 
+    function getPendingUsersCount() external view returns (uint256) {
+        return _store.pendingUsers.length();
+    }
+
     function getUserOrderTime(address account) external view returns (uint32 placeOrderTime) {
         uint64 orderId = _store.users[account].orderId;
         if (_store.users[account].orderId != 0) {
             placeOrderTime = _store.getUserOrderTime(orderId);
         } else {
             placeOrderTime = 0;
+        }
+    }
+
+    function getLastPendingUserOrderTime() external view returns (uint32 placeOrderTime) {
+        uint256 count = _store.pendingUsers.length();
+        if (count == 0) {
+            placeOrderTime = 0;
+        } else {
+            address account = _store.pendingUsers.at(count - 1);
+            uint64 orderId = _store.users[account].orderId;
+            if (_store.users[account].orderId != 0) {
+                placeOrderTime = _store.getUserOrderTime(orderId);
+            } else {
+                placeOrderTime = 0;
+            }
         }
     }
 
@@ -135,24 +174,31 @@ contract RouterV1 is
     // =============================================== Actions ===============================================
 
     // Idle => DepositJunior => Idle
-    function depositJunior(uint256 assets) external checkStatus nonReentrant {
+    function depositJunior(
+        uint256 assets
+    ) external notPending notLiquidated nonReentrant onlyWhitelisted {
         _store.updateRewards(msg.sender);
         _store.depositJunior(msg.sender, assets);
     }
 
     // Idle => WithdrawJunior => Idle
-    function withdrawJunior(uint256 shares) external checkStatus nonReentrant {
+    function withdrawJunior(
+        uint256 shares
+    ) external notPending notLiquidated nonReentrant onlyWhitelisted {
         _store.updateRewards(msg.sender);
         _store.withdrawJunior(msg.sender, shares);
     }
 
-    function depositSenior(uint256 amount) external checkStatus nonReentrant {
+    function depositSenior(uint256 amount) external notLiquidated nonReentrant onlyWhitelisted {
         _store.updateRewards(msg.sender);
         _store.depositSenior(msg.sender, amount);
     }
 
     // Idle => WithdrawSenior => RefundJunior => Idle
-    function withdrawSenior(uint256 amount, bool acceptPenalty) external checkStatus nonReentrant {
+    function withdrawSenior(
+        uint256 amount,
+        bool acceptPenalty
+    ) external notPending notLiquidated nonReentrant onlyWhitelisted {
         _store.updateRewards(msg.sender);
         _store.withdrawSenior(msg.sender, amount, acceptPenalty);
     }
@@ -161,7 +207,7 @@ contract RouterV1 is
     function rebalance(
         uint256 seniorPrice,
         uint256 juniorPrice
-    ) external checkStatus onlyRole(KEEPER_ROLE) {
+    ) external notPending notLiquidated onlyRole(KEEPER_ROLE) {
         _store.updateRewards();
         _store.rebalance(seniorPrice, juniorPrice);
     }
@@ -174,7 +220,7 @@ contract RouterV1 is
     }
 
     // Idle => BuyJunior => Idle
-    function refundJunior() external nonReentrant {
+    function refundJunior() external notPending nonReentrant onlyRole(KEEPER_ROLE) {
         require(_store.pendingRefundAssets != 0, "RouterV1::NO_REFUND_ASSETS");
         require(_store.users[address(0)].status == UserStatus.Idle, "RouterV1::INPROPER_STATUS");
         _store.updateRewards();
@@ -198,6 +244,10 @@ contract RouterV1 is
     function claimSeniorRewards() external nonReentrant returns (uint256) {
         _store.updateRewards(msg.sender);
         return _store.rewardController.claimSeniorRewardsFor(msg.sender, msg.sender);
+    }
+
+    function isLiquidated() external view returns (bool) {
+        return _store.isLiquidated;
     }
 
     // ============================================= Callbacks =============================================

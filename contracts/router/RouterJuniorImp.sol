@@ -190,20 +190,13 @@ library RouterJuniorImp {
             seniorAssetsToRepay,
             juniorAssetsToRemove
         );
-
-        // console.log("withdrawJunior:");
-        // console.log("juniorSharesToWithdraw", juniorSharesToWithdraw);
-        // console.log("juniorAssetsToWithdraw", juniorAssetsToWithdraw);
-        // console.log("seniorAssetsToRepay", seniorAssetsToRepay);
-        // console.log("juniorAssetsToRemove", juniorAssetsToRemove);
-
         // the status of ticket should be init
         emit WithdrawJunior(account, juniorSharesToWithdraw, juniorAssetsToWithdraw);
     }
 
     function onWithdrawJuniorSuccess(
         RouterStateStore storage store,
-        MuxOrderContext memory context,
+        MuxOrderContext memory,
         address account,
         uint256 seniorAssetsBought // senior token
     ) public {
@@ -214,30 +207,10 @@ library RouterJuniorImp {
             uint256 juniorAssetsToRemove
         ) = store.getWithdrawJuniorStatus(account);
 
-        require(seniorAssetsBought >= seniorAssetsToRepay, "ImpJunior::INSUFFICIENT_REPAYMENT");
         uint256 seniorAssetsBorrowed = store.seniorBorrows();
+        seniorAssetsToRepay = MathUpgradeable.min(seniorAssetsToRepay, seniorAssetsBorrowed);
+        require(seniorAssetsBought >= seniorAssetsToRepay, "ImpJunior::INSUFFICIENT_REPAYMENT");
         uint256 juniorAssetsRemains = juniorAssetsToWithdraw - juniorAssetsToRemove;
-
-        // virtual swap
-        if (seniorAssetsBought > seniorAssetsToRepay && seniorAssetsBorrowed > 0) {
-            // the junior amount we removed is always more than the expected amount
-            // since we have exact junior and senior prices
-            // we do a virtual swap, turning the extra output to junior token
-            // to avoid the case that junior user receives both junior and senior token after withdrawal
-            uint256 swapIn = MathUpgradeable.min(
-                seniorAssetsBought - seniorAssetsToRepay,
-                seniorAssetsBorrowed
-            );
-            uint256 swapOut = store.toJuniorUnit(
-                (swapIn * context.seniorPrice) / context.juniorPrice
-            );
-            if (store.juniorVault.totalAssets() > swapOut) {
-                store.juniorVault.transferOut(swapOut);
-                juniorAssetsRemains += swapOut;
-                // combined with repay
-                seniorAssetsToRepay += swapIn;
-            }
-        }
 
         // repay
         if (seniorAssetsToRepay > 0) {

@@ -121,6 +121,9 @@ library RouterRebalanceImp {
         if (seniorAssetsOverflow > 0) {
             store.pendingRefundAssets += seniorAssetsOverflow;
         }
+        if (store.isLiquidated) {
+            store.isLiquidated = false;
+        }
         emit SellJuniorSuccess(
             juniorAssetsSpent,
             seniorAssetsToRepay,
