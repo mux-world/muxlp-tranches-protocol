@@ -106,8 +106,8 @@ library RouterSeniorImp {
             store.seniorVault.withdraw(msg.sender, account, seniorSharesToWithdraw, account);
             emit WithdrawSenior(account, seniorSharesToWithdraw);
         } else {
-            uint256 juniorAssetsToRemove = store.toJuniorUnit(
-                store.config.estimateMaxIn(seniorAssetsToWithdraw - seniorAssetsWithdrawable)
+            uint256 juniorAssetsToRemove = store.config.estimateMaxIn(
+                store.toJuniorUnit(seniorAssetsToWithdraw - seniorAssetsWithdrawable)
             );
             store.juniorVault.transferOut(juniorAssetsToRemove);
             uint64 orderId = store.config.placeRemoveOrder(

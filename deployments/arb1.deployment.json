@@ -49,7 +49,7 @@
     "address": "0x9B637AeE65106B1d55CEA5d560Fd0C67Ce1F18C5",
     "dependencies": {
       "admin": "0x2257dc42b363d611898057354c031a670934ed3f",
-      "implementation": "0xff2904A0494A4BBECa85e866a921c5A14C3F792C"
+      "implementation": "0xC21808184Be7EcDD80c4D5f3CB0fAa3ceC850A5E"
     },
     "deployedAt": 192951042
   },
@@ -113,34 +113,56 @@
     "address": "0xf0d95EDAbB0CfA923B5d52BF4504Ac64df451C69",
     "deployedAt": 192951141
   },
+  "RouterJuniorImp": {
+    "type": "plain",
+    "name": "RouterJuniorImp",
+    "address": "0x87E1DE8D4E3DED5AA7431ecacA5F295DD6d22Eca",
+    "deployedAt": 199163508
+  },
   "RouterRebalanceImp": {
     "type": "plain",
     "name": "RouterRebalanceImp",
-    "address": "0x737Ecc015750906eBFdAD5CaAD27D54473bAA3B8",
-    "deployedAt": 199127626
+    "address": "0x451D4C41b45dd13572D31a3FAe0081fE39e53bAd",
+    "deployedAt": 199163531
   },
   "RouterSeniorImp": {
     "type": "plain",
     "name": "RouterSeniorImp",
-    "address": "0x1b61401c490eA13622608864A37fdB9Ae876Bf7f",
-    "deployedAt": 199127638
+    "address": "0x1D3067339FdE70E48d5F3E790a9Ca31E75E62a85",
+    "deployedAt": 199163544
   },
-  "RouterJuniorImp": {
+  "TranchePOL__implementation": {
     "type": "plain",
-    "name": "RouterJuniorImp",
-    "address": "0x7C1A9Ed80D28b170100AB1a46D5352FF10488158",
-    "deployedAt": 199132735
+    "name": "TranchePOL__implementation",
+    "address": "0x48Fa7d65f2a5751982d0999457C0a2EB9F88Ff6D",
+    "deployedAt": 201580420
+  },
+  "TranchePOL": {
+    "type": "upgradeable",
+    "name": "TranchePOL",
+    "address": "0xbFBda4D31db778798527fB45Fc82F1b65017466d",
+    "dependencies": {
+      "admin": "0x2257dc42b363d611898057354c031a670934ed3f",
+      "implementation": "0x48Fa7d65f2a5751982d0999457C0a2EB9F88Ff6D"
+    },
+    "deployedAt": 201569228
   },
   "RouterImp": {
     "type": "plain",
     "name": "RouterImp",
-    "address": "0x986300ca8979034A2531DdB6795Dd6BA466C8251",
-    "deployedAt": 199132747
+    "address": "0xb735E3bD4B13cE711b4fB95F9A4C7Cf1025bfC3D",
+    "deployedAt": 201598822
   },
   "RouterV1__implementation": {
     "type": "plain",
     "name": "RouterV1__implementation",
-    "address": "0xff2904A0494A4BBECa85e866a921c5A14C3F792C",
-    "deployedAt": 199132759
+    "address": "0xC21808184Be7EcDD80c4D5f3CB0fAa3ceC850A5E",
+    "deployedAt": 201598838
+  },
+  "TrancheReader": {
+    "type": "plain",
+    "name": "TrancheReader",
+    "address": "0x603F3E80B349B62D9A47fcDbf49E289b6B72FA2a",
+    "deployedAt": 201598838
   }
 }

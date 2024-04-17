@@ -125,16 +125,21 @@ library RouterImp {
     ) public view returns (bool isBalanced, bool isBorrow, uint256 delta) {
         uint256 targetLeverage = store.config.getUint256(TARGET_LEVERAGE);
         require(targetLeverage > ONE, "RouterImp::INVALID_LEVERAGE");
-        uint256 threshold = store.config.getUint256(REBALANCE_THRESHOLD);
         uint256 assetUsd = (store.juniorTotalAssets() * juniorPrice) / ONE;
         uint256 borrowUsd = (store.toJuniorUnit(store.seniorBorrows()) * seniorPrice) / ONE;
         if (assetUsd > borrowUsd) {
+            uint256 threshold = store.config.getUint256(REBALANCE_THRESHOLD);
+            uint256 thresholdUsd = store.config.getUint256(REBALANCE_THRESHOLD_USD);
             uint256 principleUsd = assetUsd - borrowUsd;
             uint256 targetBorrowUsd = (principleUsd * (targetLeverage - ONE)) / ONE;
             isBorrow = targetBorrowUsd >= borrowUsd;
             uint256 deltaUsd = isBorrow ? targetBorrowUsd - borrowUsd : borrowUsd - targetBorrowUsd;
-            isBalanced = ((deltaUsd * ONE) / principleUsd) <= threshold;
             delta = store.toSeniorUnit((deltaUsd * ONE) / seniorPrice);
+            if (delta < thresholdUsd) {
+                isBalanced = true;
+            } else {
+                isBalanced = ((deltaUsd * ONE) / principleUsd) <= threshold;
+            }
         } else {
             // wait for liquidation, not rebalanced
             isBalanced = true;
@@ -178,7 +183,7 @@ library RouterImp {
             store.buyJunior(toBorrow);
         } else {
             // to wad
-            uint256 assets = store.config.estimateMaxIn(delta);
+            uint256 assets = store.config.estimateMaxIn(store.toJuniorUnit(delta));
             store.sellJunior(assets);
         }
     }

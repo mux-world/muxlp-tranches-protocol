@@ -24,6 +24,7 @@ bytes32 constant MAX_BORROWS = keccak256("MAX_BORROWS");
 // ======================================== Router ========================================
 bytes32 constant TARGET_LEVERAGE = keccak256("TARGET_LEVERAGE");
 bytes32 constant REBALANCE_THRESHOLD = keccak256("REBALANCE_THRESHOLD");
+bytes32 constant REBALANCE_THRESHOLD_USD = keccak256("REBALANCE_THRESHOLD_USD");
 // bytes32 constant MUX_LIQUIDITY_POOL = keccak256("MUX_LIQUIDITY_POOL");
 bytes32 constant LIQUIDATION_LEVERAGE = keccak256("LIQUIDATION_LEVERAGE"); // 10%
 bytes32 constant MUX_ORDER_BOOK = keccak256("MUX_ORDER_BOOK");
