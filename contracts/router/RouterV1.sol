@@ -6,6 +6,7 @@ import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.
 import "@openzeppelin/contracts-upgradeable/utils/structs/EnumerableSetUpgradeable.sol";
 
 import "../interfaces/mux/IMuxLiquidityCallback.sol";
+import "../interfaces/IRouterV1.sol";
 import "../libraries/LibConfigSet.sol";
 import "./RouterStore.sol";
 import "./RouterImp.sol";
@@ -14,7 +15,8 @@ contract RouterV1 is
     RouterStore,
     Initializable,
     AccessControlEnumerableUpgradeable,
-    ReentrancyGuardUpgradeable
+    ReentrancyGuardUpgradeable,
+    IRouterV1
 {
     using RouterImp for RouterStateStore;
     using LibConfigSet for ConfigSet;
