@@ -135,10 +135,10 @@ library RouterImp {
             isBorrow = targetBorrowUsd >= borrowUsd;
             uint256 deltaUsd = isBorrow ? targetBorrowUsd - borrowUsd : borrowUsd - targetBorrowUsd;
             delta = store.toSeniorUnit((deltaUsd * ONE) / seniorPrice);
-            if (delta < thresholdUsd) {
-                isBalanced = true;
+            if (delta >= thresholdUsd && ((deltaUsd * ONE) / principleUsd) >= threshold) {
+                isBalanced = false;
             } else {
-                isBalanced = ((deltaUsd * ONE) / principleUsd) <= threshold;
+                isBalanced = true;
             }
         } else {
             // wait for liquidation, not rebalanced
@@ -278,7 +278,7 @@ library RouterImp {
     }
 
     function cancelPendingOperation(RouterStateStore storage store, address account) internal {
-        UserState memory userState = store.users[msg.sender];
+        UserState memory userState = store.users[account];
         require(userState.status != UserStatus.Idle, "RouterV1::INPROPER_STATUS");
         if (userState.orderId != 0) {
             store.config.cancelOrder(userState.orderId);

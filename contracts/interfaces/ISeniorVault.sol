@@ -54,4 +54,6 @@ interface ISeniorVault {
     function borrow(uint256 assets) external;
 
     function repay(uint256 assets) external;
+
+    function transferFrom(address from, address to, uint256 shares) external;
 }

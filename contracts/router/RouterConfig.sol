@@ -44,8 +44,12 @@ contract RouterConfig {
         return router.getConfig(TARGET_LEVERAGE).toUint256();
     }
 
-    function rebalanceThreshold() public view virtual returns (uint256) {
+    function rebalanceThresholdRate() public view virtual returns (uint256) {
         return router.getConfig(REBALANCE_THRESHOLD).toUint256();
+    }
+
+    function rebalanceThresholdUsd() public view virtual returns (uint256) {
+        return router.getConfig(REBALANCE_THRESHOLD_USD).toUint256();
     }
 
     function liquidationLeverage() public view virtual returns (uint256) {
@@ -72,13 +76,17 @@ contract RouterConfig {
         router.setConfig(TARGET_LEVERAGE, targetLeverage_.toBytes32());
     }
 
-    function setRebalanceThreshold(uint256 rebalanceThreshold_) public virtual {
-        require(rebalanceThreshold_ < ONE, "RouterConfig::INVALID_THRESHOLD");
-        router.setConfig(REBALANCE_THRESHOLD, rebalanceThreshold_.toBytes32());
-    }
-
     function setLiquidationLeverage(uint256 liquidationLeverage_) public virtual onlyAdmin {
         require(liquidationLeverage_ > targetLeverage(), "RouterConfig::INVALID_LEVERAGE");
         router.setConfig(LIQUIDATION_LEVERAGE, liquidationLeverage_.toBytes32());
+    }
+
+    function setRebalanceThresholdRate(uint256 rebalanceThresholdRate_) public virtual {
+        require(rebalanceThresholdRate_ < ONE, "RouterConfig::INVALID_THRESHOLD");
+        router.setConfig(REBALANCE_THRESHOLD, rebalanceThresholdRate_.toBytes32());
+    }
+
+    function setRebalanceThresholdUsd(uint256 rebalanceThresholdUsd_) public virtual {
+        router.setConfig(REBALANCE_THRESHOLD_USD, rebalanceThresholdUsd_.toBytes32());
     }
 }

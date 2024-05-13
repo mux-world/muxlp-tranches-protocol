@@ -84,4 +84,8 @@ interface IRouterV1 {
     function claimSeniorRewards() external returns (uint256);
 
     function isLiquidated() external view returns (bool);
+
+    function migrateJunior(address to) external;
+
+    function migrateSenior(address to) external;
 }

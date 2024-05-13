@@ -5,7 +5,14 @@ import "../interfaces/IJuniorVault.sol";
 import "../interfaces/ISeniorVault.sol";
 import "../interfaces/IRouterV1.sol";
 
+interface ArbSys {
+    function arbBlockNumber() external view returns (uint256);
+
+    function arbBlockHash(uint256 blockNumber) external view returns (bytes32);
+}
+
 struct TracheInfo {
+    uint256 blockNumber;
     uint256 juniorTotalAssets;
     uint256 juniorTotalSupply;
     uint256 borrowedAssets;
@@ -26,28 +33,22 @@ contract TrancheReader {
         IJuniorVault junior = IJuniorVault(juniorAddress);
         ISeniorVault senior = ISeniorVault(seniorAddress);
 
-        info.juniorTotalAssets = junior.totalAssets() + router.pendingJuniorAssets();
-        info.juniorTotalSupply = junior.totalSupply() + router.pendingJuniorShares();
+        // info.blockNumber = ArbSys(address(100)).arbBlockNumber();
+        info.juniorTotalAssets = junior.totalAssets();
+        info.juniorTotalSupply = junior.totalSupply();
         info.borrowedAssets = senior.borrows(routerAddress);
         info.pendingBorrowAssets = router.pendingBorrowAssets();
         info.pendingJuniorAssets = router.pendingJuniorAssets();
         info.pendingJuniorShares = router.pendingJuniorShares();
         info.pendingJuniorDeposits = router.pendingJuniorDeposits();
 
-        UserState memory keeperState = router.getUserStates(address(0));
         uint256 n = router.getPendingUsersCount();
-        if (keeperState.orderId != 0) {
-            n += 1;
-        }
         if (n > 0) {
             info.pendingOrderIds = new uint256[](n);
             address[] memory pendingUsers = router.getPendingUsers(0, n);
             for (uint256 i = 0; i < n; i++) {
                 UserState memory state = router.getUserStates(pendingUsers[i]);
                 info.pendingOrderIds[i] = state.orderId;
-            }
-            if (keeperState.orderId != 0) {
-                info.pendingOrderIds[n - 1] = keeperState.orderId;
             }
         }
     }

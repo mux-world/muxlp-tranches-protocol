@@ -147,6 +147,25 @@ contract SeniorVault is
     }
 
     /**
+     * @dev Transfers a specified amount of shares from one address to another.
+     * Can only be called by an address with the HANDLER_ROLE.
+     *
+     * @param from The address to transfer shares from.
+     * @param to The address to transfer shares to.
+     * @param shares The amount of shares to transfer.
+     */
+    function transferFrom(
+        address from,
+        address to,
+        uint256 shares
+    ) external onlyRole(HANDLER_ROLE) {
+        require(block.timestamp > _store.timelocks[from], "SeniorVault::FROM_LOCKED");
+        require(block.timestamp > _store.timelocks[to], "SeniorVault::TO_LOCKED");
+        _store.update(from, to, shares);
+        _store.timelocks[to] = _store.timelocks[from];
+    }
+
+    /**
      * Borrow assets from the vault.
      * @param assets The amount of assets to borrow.
      */

@@ -8,7 +8,6 @@ bytes32 constant MCB_TOKEN = keccak256("MCB_TOKEN");
 bytes32 constant MLP_TOKEN = keccak256("MLP_TOKEN");
 
 // ======================================== JuniorVault ========================================
-bytes32 constant REWARD_CONTROLLER = keccak256("REWARD_CONTROLLER");
 bytes32 constant MUX_REWARD_ROUTER = keccak256("MUX_REWARD_ROUTER");
 bytes32 constant MUX_LIQUIDITY_POOL = keccak256("MUX_LIQUIDITY_POOL");
 bytes32 constant ASSET_SUPPLY_CAP = keccak256("ASSET_SUPPLY_CAP");

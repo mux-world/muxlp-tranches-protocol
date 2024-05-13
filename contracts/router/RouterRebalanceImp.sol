@@ -79,8 +79,13 @@ library RouterRebalanceImp {
     }
 
     function onBuyJuniorFailed(RouterStateStore storage store) public {
-        store.cleanOrderId(address(0));
         uint256 seniorAssetsSpent = store.getBuyJuniorStatus();
+        IERC20Upgradeable(store.seniorVault.depositToken()).safeTransfer(
+            address(store.seniorVault),
+            seniorAssetsSpent
+        );
+        store.seniorVault.repay(seniorAssetsSpent);
+        store.cleanBuyJuniorStatus();
         emit BuyJuniorFailed(seniorAssetsSpent);
     }
 
@@ -171,8 +176,6 @@ library RouterRebalanceImp {
     }
 
     function onRefundJuniorFailed(RouterStateStore storage store) public {
-        store.cleanOrderId(address(0));
-        uint256 seniorAssetsSpent = store.getRefundJuniorStatus();
-        emit RefundJuniorFailed(seniorAssetsSpent);
+        revert("RefundJuniorFailed");
     }
 }

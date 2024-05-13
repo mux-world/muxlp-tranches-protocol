@@ -19,4 +19,8 @@ interface IRewardController {
         uint256[] memory rewardAmounts,
         uint256 utilizedAmount
     ) external;
+
+    function migrateSeniorRewardFor(address from, address to) external;
+
+    function migrateJuniorRewardFor(address from, address to) external;
 }

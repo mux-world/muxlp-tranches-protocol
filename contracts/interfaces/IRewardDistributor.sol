@@ -9,4 +9,6 @@ interface IRewardDistributor {
     function claim(address _receiver) external returns (uint256);
 
     function claimFor(address account, address _receiver) external returns (uint256);
+
+    function migrate(address from, address to) external;
 }

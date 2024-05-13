@@ -28,6 +28,13 @@ contract RewardDistributor is ReentrancyGuardUpgradeable, OwnableUpgradeable {
     mapping(address => uint256) lastClaimTime;
 
     event Claim(address receiver, uint256 amount);
+    event Migrate(
+        address from,
+        address to,
+        uint256 claimableReward,
+        uint256 previousCumulatedRewardPerToken,
+        uint256 lastClaimTime
+    );
 
     modifier onlyHandler() {
         require(isHandler[msg.sender], "RewardDistributor::HANDLER");
@@ -102,6 +109,33 @@ contract RewardDistributor is ReentrancyGuardUpgradeable, OwnableUpgradeable {
             claimableReward[account] +
             ((balance * (cumulativeRewardPerToken - previousCumulatedRewardPerToken[account])) /
                 ONE);
+    }
+
+    function migrate(address from, address to) external onlyHandler nonReentrant {
+        require(to != address(0), "RewardDistributor::INVALID_ACCOUNT");
+        require(from != to, "RewardDistributor::SAME_ACCOUNT");
+
+        _updateRewards(to);
+        require(
+            claimableReward[to] == 0 && balanceOf(to) == 0,
+            "RewardDistributor::RECEIVER_NOT_EMPTY"
+        );
+
+        claimableReward[to] = claimableReward[from];
+        previousCumulatedRewardPerToken[to] = previousCumulatedRewardPerToken[from];
+        lastClaimTime[to] = lastClaimTime[from];
+
+        emit Migrate(
+            from,
+            to,
+            claimableReward[from],
+            previousCumulatedRewardPerToken[from],
+            lastClaimTime[from]
+        );
+
+        claimableReward[from] = 0;
+        previousCumulatedRewardPerToken[from] = 0;
+        lastClaimTime[from] = 0;
     }
 
     // account can be 0

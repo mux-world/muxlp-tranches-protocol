@@ -41,6 +41,8 @@ interface IJuniorVault {
 
     function collectMuxRewards(address owner) external;
 
+    function transferFrom(address from, address to, uint256 shares) external;
+
     function transferIn(uint256 assets) external;
 
     function transferOut(uint256 assets) external;

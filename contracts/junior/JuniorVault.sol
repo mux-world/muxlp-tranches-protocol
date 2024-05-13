@@ -133,6 +133,22 @@ contract JuniorVault is
     }
 
     /**
+     * @dev Transfers shares from one address to another.
+     * Can only be called by an address with the HANDLER_ROLE.
+     *
+     * @param from The address to transfer shares from.
+     * @param to The address to transfer shares to.
+     * @param shares The amount of shares to transfer.
+     */
+    function transferFrom(
+        address from,
+        address to,
+        uint256 shares
+    ) external onlyRole(HANDLER_ROLE) {
+        _store.update(from, to, shares);
+    }
+
+    /**
      * Call by the router. Claim the rewards from staking contracts then distribute to junior/senior holders.
      *
      * @param receiver the receiver of the rewards

@@ -173,6 +173,10 @@ contract RouterV1 is
         return _store.rewardController.claimableSeniorRewards(account);
     }
 
+    function isLiquidated() external view returns (bool) {
+        return _store.isLiquidated;
+    }
+
     // =============================================== Actions ===============================================
 
     // Idle => DepositJunior => Idle
@@ -233,9 +237,14 @@ contract RouterV1 is
         _store.updateRewards();
     }
 
-    function cancelPendingOperation() external {
+    function cancelPendingOperation() external notLiquidated {
         _store.updateRewards(msg.sender);
         _store.cancelPendingOperation(msg.sender);
+    }
+
+    function cancelRebalancePendingOperation() external notLiquidated onlyRole(KEEPER_ROLE) {
+        _store.updateRewards(address(0));
+        _store.cancelPendingOperation(address(0));
     }
 
     function claimJuniorRewards() external returns (uint256) {
@@ -248,8 +257,22 @@ contract RouterV1 is
         return _store.rewardController.claimSeniorRewardsFor(msg.sender, msg.sender);
     }
 
-    function isLiquidated() external view returns (bool) {
-        return _store.isLiquidated;
+    function migrateJunior(address to) external nonReentrant notPending notLiquidated {
+        require(_store.juniorVault.balanceOf(to) == 0, "RouterV1::RECEIVER_NOT_EMPTY");
+        uint256 balance = _store.juniorVault.balanceOf(msg.sender);
+        require(balance != 0, "RouterV1::NO_ASSETS");
+        _store.updateRewards(msg.sender);
+        _store.rewardController.migrateJuniorRewardFor(msg.sender, to);
+        _store.juniorVault.transferFrom(msg.sender, to, balance);
+    }
+
+    function migrateSenior(address to) external nonReentrant notPending notLiquidated {
+        require(_store.seniorVault.balanceOf(to) == 0, "RouterV1::RECEIVER_NOT_EMPTY");
+        uint256 balance = _store.seniorVault.balanceOf(msg.sender);
+        require(balance != 0, "RouterV1::NO_ASSETS");
+        _store.updateRewards(msg.sender);
+        _store.rewardController.migrateSeniorRewardFor(msg.sender, to);
+        _store.seniorVault.transferFrom(msg.sender, to, balance);
     }
 
     // ============================================= Callbacks =============================================

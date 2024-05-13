@@ -252,7 +252,6 @@ library RouterJuniorImp {
             address(store.juniorVault),
             juniorAssetsToWithdraw
         );
-        store.juniorVault.transferIn(juniorAssetsToWithdraw);
         store.juniorVault.deposit(juniorAssetsToWithdraw, juniorSharesToWithdraw, account);
         store.cleanWithdrawJuniorStatus(account);
         emit WithdrawJuniorFailed(account, juniorSharesToWithdraw, juniorAssetsToWithdraw);

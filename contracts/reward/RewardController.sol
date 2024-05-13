@@ -178,6 +178,14 @@ contract RewardController is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         juniorRewardDistributor.updateRewards(account);
     }
 
+    function migrateSeniorRewardFor(address from, address to) external onlyHandler {
+        seniorRewardDistributor.migrate(from, to);
+    }
+
+    function migrateJuniorRewardFor(address from, address to) external onlyHandler {
+        juniorRewardDistributor.migrate(from, to);
+    }
+
     function notifyRewards(
         address[] memory rewardTokens,
         uint256[] memory rewardAmounts,
