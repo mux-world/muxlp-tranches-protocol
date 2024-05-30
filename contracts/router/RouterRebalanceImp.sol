@@ -175,7 +175,7 @@ library RouterRebalanceImp {
         emit RefundJuniorSuccess(seniorAssetsSpent, juniorAssetsBought, context.juniorPrice);
     }
 
-    function onRefundJuniorFailed(RouterStateStore storage store) public {
+    function onRefundJuniorFailed(RouterStateStore storage) public pure {
         revert("RefundJuniorFailed");
     }
 }

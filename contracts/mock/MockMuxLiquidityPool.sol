@@ -52,6 +52,8 @@ contract MockMuxLiquidityPool {
             uint96[2] memory u96s
         )
     {
+        u32s[4] = 31; // 0.031%
+        u32s[5] = 62; // 0.062%
         u96s[0] = lowerBound;
         u96s[1] = upperBound;
     }

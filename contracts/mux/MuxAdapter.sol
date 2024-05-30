@@ -161,13 +161,9 @@ library MuxAdapter {
         }
     }
 
-    function cancelOrder(ConfigSet storage set, uint64 orderId) internal returns (bool success) {
+    function cancelOrder(ConfigSet storage set, uint64 orderId) internal {
         IMuxOrderBook muxOrderBook = IMuxOrderBook(set.mustGetAddress(MUX_ORDER_BOOK));
-        try muxOrderBook.cancelOrder(orderId) {
-            success = true;
-        } catch {
-            success = false;
-        }
+        muxOrderBook.cancelOrder(orderId);
     }
 
     function placeAddOrder(

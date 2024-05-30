@@ -1,15 +1,6 @@
 import {ethers, network} from "hardhat";
 import {expect} from "chai";
-import {
-  toWei,
-  toUnit,
-  fromUnit,
-  fromWei,
-  createContract,
-  a2b,
-  u2b,
-  PreMinedTokenTotalSupply,
-} from "../scripts/deployUtils";
+import {toWei, toUnit, fromUnit, fromWei, createContract} from "../scripts/deployUtils";
 import {BigNumber} from "ethers";
 import {impersonateAccount, setBalance, time} from "@nomicfoundation/hardhat-network-helpers";
 
@@ -17,7 +8,7 @@ const U = ethers.utils;
 const B = ethers.BigNumber;
 const toUsd = (v) => toUnit(v, 6);
 
-describe("States", async () => {
+describe("Cancel", async () => {
   let user0;
   let user1;
   let alice;
@@ -47,9 +38,7 @@ describe("States", async () => {
   let rewardRouter;
   let fmlp;
   let smlp;
-  let vester;
   let feeDistributor;
-  let muxDistributor;
 
   const a2b = (a) => {
     return a + "000000000000000000000000";
@@ -89,24 +78,13 @@ describe("States", async () => {
       "FeeDistributor",
       "0x6256dc556EE340952b8d8778f22608fd45592859"
     );
-    muxDistributor = await ethers.getContractAt(
-      "MuxDistributor",
-      "0xF66937704923DE6FF7cD51861F772C1eB1C431e9"
-    );
     rewardRouter = await ethers.getContractAt(
-      "RewardRouter",
+      "MockRewardRouter",
       "0xaf9C4F6A0ceB02d4217Ff73f3C95BbC8c7320ceE"
     );
     mlp = await ethers.getContractAt("SimpleERC20", "0x7CbaF5a14D953fF896E5B3312031515c858737C8");
-    fmlp = await ethers.getContractAt(
-      "MlpRewardTracker",
-      "0x290450cDea757c68E4Fe6032ff3886D204292914"
-    );
-    smlp = await ethers.getContractAt(
-      "MlpRewardTracker",
-      "0x0a9bbf8299FEd2441009a7Bb44874EE453de8e5D"
-    );
-    vester = await ethers.getContractAt("Vester", "0xBCF8c124975DE6277D8397A3Cad26E2333620226");
+    fmlp = await ethers.getContractAt("SimpleERC20", "0x290450cDea757c68E4Fe6032ff3886D204292914");
+    smlp = await ethers.getContractAt("SimpleERC20", "0x0a9bbf8299FEd2441009a7Bb44874EE453de8e5D");
 
     liquidityPool = await ethers.getContractAt(
       "IMuxLiquidityPool",
@@ -203,7 +181,7 @@ describe("States", async () => {
     await routerConfig.setMuxRewardRouter(rewardRouter.address);
     await routerConfig.setMuxOrderBook(orderBook.address);
     await routerConfig.setMuxLiquidityPool(liquidityPool.address);
-    await routerConfig.setRebalanceThreshold(toWei("0.05"));
+    await routerConfig.setRebalanceThresholdRate(toWei("0.05"));
     await routerConfig.setLiquidationLeverage(toWei("10"));
   });
 

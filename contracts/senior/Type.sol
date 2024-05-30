@@ -19,5 +19,7 @@ struct SeniorStateStore {
     mapping(address => uint256) borrows;
     mapping(address => uint256) balances;
     mapping(address => uint256) timelocks;
-    bytes32[20] __reserves;
+    uint256 aaveSuppliedBalance;
+    uint256 aaveLastUpdateTime;
+    bytes32[18] __reserves;
 }

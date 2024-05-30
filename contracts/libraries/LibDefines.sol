@@ -36,3 +36,9 @@ bytes32 constant CONFIG_ROLE = keccak256("CONFIG_ROLE");
 
 //==================
 uint256 constant ONE = 1e18;
+
+// ======================================== AAVE =========================================
+bytes32 constant AAVE_POOL = keccak256("AAVE_POOL");
+bytes32 constant AAVE_TOKEN = keccak256("AAVE_TOKEN");
+bytes32 constant AAVE_REWARDS_CONTROLLER = keccak256("AAVE_REWARDS_CONTROLLER");
+bytes32 constant AAVE_EXTRA_REWARD_TOKEN = keccak256("AAVE_EXTRA_REWARD_TOKEN");

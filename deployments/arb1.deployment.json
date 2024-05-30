@@ -8,7 +8,7 @@
   "SeniorVault__implementation": {
     "type": "plain",
     "name": "SeniorVault__implementation",
-    "address": "0xC581505425A254249FE4E66ED4b30aCAA45C02f9",
+    "address": "0x6B65FaDD381A5175E2E8055Af612cfDd7940fBC0",
     "deployedAt": 204279458
   },
   "SeniorVault": {
@@ -17,7 +17,7 @@
     "address": "0x99615f5480B716690e6Fb2875bcf4a87a61CE198",
     "dependencies": {
       "admin": "0x2d18225B9A3F8C8C6f6f5C51Dc9C5bae5179Ac8B",
-      "implementation": "0xC581505425A254249FE4E66ED4b30aCAA45C02f9"
+      "implementation": "0x6B65FaDD381A5175E2E8055Af612cfDd7940fBC0"
     },
     "deployedAt": 192950933
   },
@@ -30,7 +30,7 @@
   "JuniorVault__implementation": {
     "type": "plain",
     "name": "JuniorVault__implementation",
-    "address": "0x8CD4d7C30CD83ae13c0c67bE72e2CA8d1A4ea6dB",
+    "address": "0xac96E14B8897ABa253Efe2299B0724E5009395fD",
     "deployedAt": 204279643
   },
   "JuniorVault": {
@@ -39,7 +39,7 @@
     "address": "0x883774d2c63a3D7a461a27aF620aB23B8796b50e",
     "dependencies": {
       "admin": "0x2d18225B9A3F8C8C6f6f5C51Dc9C5bae5179Ac8B",
-      "implementation": "0x8CD4d7C30CD83ae13c0c67bE72e2CA8d1A4ea6dB"
+      "implementation": "0xac96E14B8897ABa253Efe2299B0724E5009395fD"
     },
     "deployedAt": 192950969
   },
@@ -49,14 +49,14 @@
     "address": "0x9B637AeE65106B1d55CEA5d560Fd0C67Ce1F18C5",
     "dependencies": {
       "admin": "0x2d18225B9A3F8C8C6f6f5C51Dc9C5bae5179Ac8B",
-      "implementation": "0xDf8eC5DB9f06ECb8a100473456fd095DF02F6d5E"
+      "implementation": "0x645a63752B27949BAe50947244D1c072Dc02F9d3"
     },
     "deployedAt": 192951042
   },
   "RewardController__implementation": {
     "type": "plain",
     "name": "RewardController__implementation",
-    "address": "0xa5d0656e9884C4dE05e1fB60d7d7DB46611cBD37",
+    "address": "0xC90A587502eCaa3464DcD72f31B2420cA750B2FC",
     "deployedAt": 204280106
   },
   "RewardController": {
@@ -65,7 +65,7 @@
     "address": "0xb68Ac7D3E3833DeB35fc5D63c16E3B5da12a9A41",
     "dependencies": {
       "admin": "0x2d18225B9A3F8C8C6f6f5C51Dc9C5bae5179Ac8B",
-      "implementation": "0xa5d0656e9884C4dE05e1fB60d7d7DB46611cBD37"
+      "implementation": "0xC90A587502eCaa3464DcD72f31B2420cA750B2FC"
     },
     "deployedAt": 192951067
   },
@@ -98,7 +98,7 @@
   "SeniorConfig": {
     "type": "plain",
     "name": "SeniorConfig",
-    "address": "0xDe67C71b6aCF3ccB9451b3FAE60d8BfFB5B95f02",
+    "address": "0xbE08Ad8DAf5b919eD76E8a51Ad1ebA853a3Deb9D",
     "deployedAt": 192951114
   },
   "JuniorConfig": {
@@ -135,40 +135,40 @@
     "address": "0x7A60E6C6Eb5cA58BDB2BD35D63611cC6F41C26cC",
     "deployedAt": 201598838
   },
-  "RouterImp": {
-    "type": "plain",
-    "name": "RouterImp",
-    "address": "0x98599429e9D4314E4Cd97a3ad03C17755414b82A",
-    "deployedAt": 202576743
-  },
   "RewardDistributor": {
     "type": "plain",
     "name": "RewardDistributor",
     "address": "0x56F16eEEA8b4451f86fC6A84c3c73F84b55A829D",
     "deployedAt": 204295373
   },
-  "RouterV1__implementation": {
-    "type": "plain",
-    "name": "RouterV1__implementation",
-    "address": "0xc0065C326455E47aB8668391b96B2Ea7557fA812",
-    "deployedAt": 209096956
-  },
   "RouterJuniorImp": {
     "type": "plain",
     "name": "RouterJuniorImp",
-    "address": "0x4d53aF5e99Bb8d76991752A69Adb73c1F81423ee",
-    "deployedAt": 209096920
+    "address": "0x18aFD97Cf2977d12D4De85e46699AacC0e8d1B91",
+    "deployedAt": 209101243
   },
   "RouterRebalanceImp": {
     "type": "plain",
     "name": "RouterRebalanceImp",
-    "address": "0xC7A328fBE422f75977CC52C3423a97D3EA4744aE",
-    "deployedAt": 209096931
+    "address": "0x295Dd755996a1D67b317164E620665A7Ed0Edaf0",
+    "deployedAt": 209101255
   },
   "RouterSeniorImp": {
     "type": "plain",
     "name": "RouterSeniorImp",
-    "address": "0xB62851Fd087F720E1415c93F15CEE99B9F4870f3",
-    "deployedAt": 209096943
+    "address": "0x1f50D0a869f6aB08BbDb37281f4fd8839Af5A51d",
+    "deployedAt": 209101268
+  },
+  "RouterImp": {
+    "type": "plain",
+    "name": "RouterImp",
+    "address": "0x07422fc6Ce098C27F274649307f6D92B68841534",
+    "deployedAt": 209101286
+  },
+  "RouterV1__implementation": {
+    "type": "plain",
+    "name": "RouterV1__implementation",
+    "address": "0x645a63752B27949BAe50947244D1c072Dc02F9d3",
+    "deployedAt": 209101298
   }
 }

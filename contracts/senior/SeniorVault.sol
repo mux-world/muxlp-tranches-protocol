@@ -70,7 +70,7 @@ contract SeniorVault is
         return _store.asset;
     }
 
-    function depositToken() external view returns (address) {
+    function depositToken() public view returns (address) {
         return _store.asset;
     }
 
@@ -116,6 +116,22 @@ contract SeniorVault is
         unlockTimestamp = _store.timelocks[account];
     }
 
+    function aaveTotalSupplied() external view returns (uint256) {
+        return _store.aaveSuppliedBalance;
+    }
+
+    function aaveLastUpdateTime() external view returns (uint256) {
+        return _store.aaveLastUpdateTime;
+    }
+
+    function claimableAaveRewards() external view returns (uint256 assets) {
+        assets = _store.increasedBalance();
+    }
+
+    function claimableAaveExtraRewards() external view returns (address token, uint256 amount) {
+        (token, amount) = _store.claimableAaveExtraRewards();
+    }
+
     /**
      * Deposit assets to the vault.
      * @param assets The amount of assets to deposit.
@@ -126,6 +142,7 @@ contract SeniorVault is
         address receiver
     ) external nonReentrant onlyRole(HANDLER_ROLE) returns (uint256 shares) {
         shares = _store.deposit(assets, receiver);
+        _store.supplyAllBalanceToAave();
     }
 
     /**
@@ -143,6 +160,8 @@ contract SeniorVault is
         uint256 shares,
         address receiver
     ) external nonReentrant onlyRole(HANDLER_ROLE) returns (uint256 assets, uint256 penalty) {
+        assets = _store.convertToAssets(shares);
+        _ensureAssets(assets);
         (assets, penalty) = _store.withdraw(caller, owner, shares, receiver);
     }
 
@@ -170,6 +189,7 @@ contract SeniorVault is
      * @param assets The amount of assets to borrow.
      */
     function borrow(uint256 assets) external onlyRole(HANDLER_ROLE) {
+        _ensureAssets(assets);
         _store.borrow(assets, msg.sender);
     }
 
@@ -179,5 +199,28 @@ contract SeniorVault is
      */
     function repay(uint256 assets) external onlyRole(HANDLER_ROLE) {
         _store.repay(msg.sender, assets);
+        _store.supplyAllBalanceToAave();
+    }
+
+    function claimAaveRewards(address receiver) external onlyRole(HANDLER_ROLE) returns (uint256) {
+        return _store.claimAaveRewards(receiver);
+    }
+
+    function claimAaveExtraRewards(
+        address receiver
+    ) external onlyRole(HANDLER_ROLE) returns (address token, uint256 amount) {
+        return _store.claimAaveExtraRewards(receiver);
+    }
+
+    function _ensureAssets(uint256 assets) internal {
+        uint256 remains = IERC20Upgradeable(_store.asset).balanceOf(address(this));
+        if (remains < assets) {
+            uint256 withdrawal = assets - remains;
+            _store.withdrawSuppliedFromAave(withdrawal);
+        }
+        require(
+            IERC20Upgradeable(_store.asset).balanceOf(address(this)) >= assets,
+            "SeniorVault::BORROW_NOT_ENOUGH"
+        );
     }
 }

@@ -34,6 +34,9 @@ contract RewardController is OwnableUpgradeable, ReentrancyGuardUpgradeable {
 
     mapping(address => bool) public isHandler;
 
+    uint256 public lastSeniorExtraNotifyTime;
+    uint256 public lastJuniorExtraNotifyTime;
+
     event DistributeReward(address indexed receiver, uint256 amount, uint256 timespan);
     event SetHandler(address indexed handler, bool enable);
     event SetMinStableApy(uint256 prevMinApy, uint256 newMinApy);
@@ -225,6 +228,46 @@ contract RewardController is OwnableUpgradeable, ReentrancyGuardUpgradeable {
                 juniorRewards
             );
             emit DistributeReward(address(juniorRewardDistributor), juniorRewards, timespan);
+        }
+    }
+
+    function notifySeniorExtraReward(address token, uint256 amount) external onlyHandler {
+        uint256 rewardAmount;
+        if (token == rewardToken) {
+            rewardAmount = amount;
+        } else {
+            rewardAmount = _swapToken(token, amount);
+        }
+        uint256 balance = IERC20Upgradeable(rewardToken).balanceOf(address(this));
+        require(balance >= rewardAmount, "RewardController::INSUFFICIENT_BALANCE");
+        if (rewardAmount > 0) {
+            uint256 timespan = block.timestamp - lastSeniorExtraNotifyTime;
+            lastSeniorExtraNotifyTime = block.timestamp;
+            IERC20Upgradeable(rewardToken).safeTransfer(
+                address(seniorRewardDistributor),
+                rewardAmount
+            );
+            emit DistributeReward(address(seniorRewardDistributor), rewardAmount, timespan);
+        }
+    }
+
+    function notifyJuniorExtraReward(address token, uint256 amount) external onlyHandler {
+        uint256 rewardAmount;
+        if (token == rewardToken) {
+            rewardAmount = amount;
+        } else {
+            rewardAmount = _swapToken(token, amount);
+        }
+        uint256 balance = IERC20Upgradeable(rewardToken).balanceOf(address(this));
+        require(balance >= rewardAmount, "RewardController::INSUFFICIENT_BALANCE");
+        if (rewardAmount > 0) {
+            uint256 timespan = block.timestamp - lastJuniorExtraNotifyTime;
+            lastJuniorExtraNotifyTime = block.timestamp;
+            IERC20Upgradeable(rewardToken).safeTransfer(
+                address(juniorRewardDistributor),
+                rewardAmount
+            );
+            emit DistributeReward(address(juniorRewardDistributor), rewardAmount, timespan);
         }
     }
 

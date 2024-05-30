@@ -1,14 +1,6 @@
 import {ethers, network} from "hardhat";
 import {expect} from "chai";
-import {
-  toWei,
-  toUnit,
-  fromWei,
-  createContract,
-  a2b,
-  u2b,
-  PreMinedTokenTotalSupply,
-} from "../scripts/deployUtils";
+import {toWei, toUnit, fromWei, createContract} from "../scripts/deployUtils";
 import {BigNumber} from "ethers";
 
 const U = ethers.utils;

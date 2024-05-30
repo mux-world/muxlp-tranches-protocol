@@ -1,15 +1,6 @@
 import {ethers, network} from "hardhat";
 import {expect} from "chai";
-import {
-  toWei,
-  toUnit,
-  fromUnit,
-  fromWei,
-  createContract,
-  a2b,
-  u2b,
-  PreMinedTokenTotalSupply,
-} from "../scripts/deployUtils";
+import {toWei, toUnit, fromUnit, fromWei, createContract} from "../scripts/deployUtils";
 import {BigNumber} from "ethers";
 import {impersonateAccount, setBalance, time} from "@nomicfoundation/hardhat-network-helpers";
 
@@ -17,7 +8,7 @@ const U = ethers.utils;
 const B = ethers.BigNumber;
 const toUsd = (v) => toUnit(v, 6);
 
-describe("Simulate", async () => {
+describe("Test", async () => {
   let user0;
   let user1;
   let alice;
@@ -43,13 +34,6 @@ describe("Simulate", async () => {
 
   let orderBook;
   let liquidityPool;
-
-  let rewardRouter;
-  let fmlp;
-  let smlp;
-  let vester;
-  let feeDistributor;
-  let muxDistributor;
 
   const a2b = (a) => {
     return a + "000000000000000000000000";
@@ -103,7 +87,11 @@ describe("Simulate", async () => {
       RouterImp: await createContract("RouterImp", [], {
         RouterJuniorImp: await createContract("RouterJuniorImp"),
         RouterSeniorImp: await createContract("RouterSeniorImp"),
+        RouterRebalanceImp: await createContract("RouterRebalanceImp"),
       }),
+      RouterJuniorImp: await createContract("RouterJuniorImp"),
+      RouterRebalanceImp: await createContract("RouterRebalanceImp"),
+      RouterSeniorImp: await createContract("RouterSeniorImp"),
     });
     const proxyAdmin = await ethers.getContractAt(
       "ProxyAdmin",

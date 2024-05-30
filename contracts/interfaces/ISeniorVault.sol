@@ -56,4 +56,10 @@ interface ISeniorVault {
     function repay(uint256 assets) external;
 
     function transferFrom(address from, address to, uint256 shares) external;
+
+    function claimAaveRewards(address receiver) external returns (uint256);
+
+    function claimAaveExtraRewards(
+        address receiver
+    ) external returns (address token, uint256 amount);
 }

@@ -88,7 +88,7 @@ library RouterImp {
         uint256 juniorTotalShares = store.juniorTotalSupply();
         uint256 juniorTotalValues = store.juniorTotalAssets() * juniorPrice;
         uint256 juniorTotalBorrows = store.toJuniorUnit(store.seniorBorrows()) * seniorPrice;
-        if (juniorTotalValues > juniorTotalBorrows) {
+        if (juniorTotalShares != 0 && juniorTotalValues > juniorTotalBorrows) {
             return (juniorTotalValues - juniorTotalBorrows) / juniorTotalShares;
         } else {
             return 0;
@@ -149,10 +149,21 @@ library RouterImp {
     }
 
     function updateRewards(RouterStateStore storage store) public {
-        store.updateRewards(address(0));
+        updateRewards(store, address(0));
     }
 
     function updateRewards(RouterStateStore storage store, address account) public {
+        address token0 = store.seniorVault.depositToken();
+        uint256 reward0 = store.seniorVault.claimAaveRewards(address(store.rewardController));
+        if (reward0 > 0) {
+            store.rewardController.notifySeniorExtraReward(token0, reward0);
+        }
+        (address token1, uint256 reward1) = store.seniorVault.claimAaveExtraRewards(
+            address(store.rewardController)
+        );
+        if (reward1 > 0) {
+            store.rewardController.notifySeniorExtraReward(token1, reward1);
+        }
         store.updateRewards(account);
     }
 
@@ -197,14 +208,11 @@ library RouterImp {
         uint256 leverage = juniorLeverage(store, seniorPrice, juniorPrice);
         uint256 maxLeverage = store.config.getUint256(LIQUIDATION_LEVERAGE);
         require(leverage > maxLeverage, "RouterImp::NOT_LIQUIDATABLE");
-        if (cancelAllPendingOperations(store)) {
-            store.isLiquidated = true;
-            uint256 totalBalance = store.juniorVault.totalAssets();
-            store.sellJunior(totalBalance);
-            emit Liquidate(totalBalance);
-        } else {
-            emit LiquidateInterrupted();
-        }
+        cancelAllPendingOperations(store);
+        store.isLiquidated = true;
+        uint256 totalBalance = store.juniorVault.totalAssets();
+        store.sellJunior(totalBalance);
+        emit Liquidate(totalBalance);
     }
 
     // =============================================== Callbacks ===============================================
@@ -260,7 +268,7 @@ library RouterImp {
         return store.config.getPlaceOrderTime(orderId);
     }
 
-    function cancelAllPendingOperations(RouterStateStore storage store) internal returns (bool) {
+    function cancelAllPendingOperations(RouterStateStore storage store) internal {
         uint256 count = getPendingUserCount(store);
         uint64[] memory orderIds = new uint64[](count);
         for (uint256 i = 0; i < count; i++) {
@@ -268,13 +276,9 @@ library RouterImp {
         }
         for (uint256 i = 0; i < orderIds.length; i++) {
             if (orderIds[i] != 0) {
-                bool success = store.config.cancelOrder(orderIds[i]);
-                if (!success) {
-                    return false;
-                }
+                store.config.cancelOrder(orderIds[i]);
             }
         }
-        return true;
     }
 
     function cancelPendingOperation(RouterStateStore storage store, address account) internal {

@@ -1,14 +1,6 @@
 import {ethers, network} from "hardhat";
 import {expect} from "chai";
-import {
-  toWei,
-  toUnit,
-  fromWei,
-  createContract,
-  a2b,
-  u2b,
-  PreMinedTokenTotalSupply,
-} from "../scripts/deployUtils";
+import {toWei, toUnit, fromWei, createContract} from "../scripts/deployUtils";
 import {BigNumber} from "ethers";
 import {impersonateAccount, setBalance, time} from "@nomicfoundation/hardhat-network-helpers";
 
@@ -16,7 +8,7 @@ const U = ethers.utils;
 const B = ethers.BigNumber;
 const toUsd = (x) => toUnit(x, 6);
 
-describe("SeniorVault", async () => {
+describe("Staking", async () => {
   let user0;
   let user1;
   let alice;

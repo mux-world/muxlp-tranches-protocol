@@ -10,6 +10,8 @@ import "@openzeppelin/contracts-upgradeable/token/ERC20/utils/SafeERC20Upgradeab
 
 import "../libraries/LibConfigSet.sol";
 import "./SeniorVaultStore.sol";
+import "../interfaces/aave/IPool.sol";
+import "../interfaces/aave/IRewardsController.sol";
 
 library SeniorVaultImp {
     using LibConfigSet for ConfigSet;
@@ -30,6 +32,13 @@ library SeniorVaultImp {
     event Transfer(address indexed from, address indexed to, uint256 amount);
     event TransferIn(uint256 assets);
     event TransferOut(uint256 assets, address receiver);
+    event SupplyToAave(address pool, address aToken, uint256 amount, uint256 totalSuppliedBalance);
+    event WithdrawFromAave(
+        address pool,
+        address aToken,
+        uint256 amount,
+        uint256 totalSuppliedBalance
+    );
 
     function initialize(SeniorStateStore storage store, address asset) internal {
         require(asset != address(0), "ERC4626Store::INVALID_ASSET");
@@ -43,7 +52,8 @@ library SeniorVaultImp {
     ) internal view returns (uint256 assets) {
         // max borrows
         uint256 maxBorrow = store.config.getUint256(MAX_BORROWS);
-        uint256 available = IERC20Upgradeable(store.asset).balanceOf(address(this));
+        uint256 available = IERC20Upgradeable(store.asset).balanceOf(address(this)) +
+            store.aaveSuppliedBalance;
         if (maxBorrow != 0) {
             uint256 capacity = maxBorrow > store.totalBorrows ? maxBorrow - store.totalBorrows : 0;
             assets = MathUpgradeable.min(capacity, available);
@@ -176,7 +186,7 @@ library SeniorVaultImp {
             store.totalSupply += amount;
         } else {
             uint256 fromBalance = store.balances[from];
-            require(amount <= fromBalance, "ERC4626::EXCEEDED_BALANCE");
+            require(amount <= fromBalance, "SeniorVaultImp::EXCEEDED_BALANCE");
             store.balances[from] = fromBalance - amount;
         }
         if (to == address(0)) {
@@ -208,5 +218,125 @@ library SeniorVaultImp {
         uint256 shares
     ) internal view returns (uint256 assets) {
         assets = shares / (10 ** (18 - store.assetDecimals));
+    }
+
+    function supplyToAave(SeniorStateStore storage store, uint256 amount) internal {
+        require(amount > 0, "AaveAdapter::INVALID_AMOUNT");
+        address aaveToken = store.config.mustGetAddress(AAVE_TOKEN);
+        address aavePool = store.config.mustGetAddress(AAVE_POOL);
+        require(amount <= tokenBalance(store.asset), "AaveAdapter::DEPOSIT_AMOUNT_EXCEEDED");
+        // approve && supply
+        IERC20Upgradeable(store.asset).approve(address(aavePool), amount);
+        // check balance of atoken returned from Aave
+        uint256 aaveTokenBalance = tokenBalance(aaveToken);
+        IPool(aavePool).supply(store.asset, amount, address(this), 0);
+        require(
+            tokenBalance(aaveToken) - aaveTokenBalance >= amount,
+            "AaveAdapter::UNEXPECTED_RECEIVE_AMOUNT"
+        );
+        store.aaveSuppliedBalance += amount;
+        store.previousBalance = IERC20Upgradeable(store.asset).balanceOf(address(this));
+
+        emit SupplyToAave(aavePool, aaveToken, amount, store.aaveSuppliedBalance);
+    }
+
+    function supplyAllBalanceToAave(SeniorStateStore storage store) internal {
+        address aavePool = store.config.mustGetAddress(AAVE_POOL);
+        uint256 depositTokenBalance = tokenBalance(store.asset);
+        if (depositTokenBalance > 0 && aavePool != address(0)) {
+            supplyToAave(store, depositTokenBalance);
+        }
+    }
+
+    function withdrawSuppliedFromAave(SeniorStateStore storage store, uint256 amount) internal {
+        require(amount <= store.aaveSuppliedBalance, "AaveAdapter::INVALID_AMOUNT");
+        withdrawFromAave(store, amount);
+        store.aaveSuppliedBalance -= amount;
+    }
+
+    function withdrawFromAave(SeniorStateStore storage store, uint256 amount) internal {
+        address aaveToken = store.config.mustGetAddress(AAVE_TOKEN);
+        address aavePool = store.config.mustGetAddress(AAVE_POOL);
+        require(amount <= tokenBalance(aaveToken), "AaveAdapter::WITHDRAW_AMOUNT_EXCEEDED");
+        // check deposit token balance from aave
+        uint256 depositTokenBalance = tokenBalance(store.asset);
+        IPool(aavePool).withdraw(store.asset, amount, address(this));
+        require(
+            tokenBalance(store.asset) - depositTokenBalance >= amount,
+            "AaveAdapter::UNEXPECTED_RECEIVE_AMOUNT"
+        );
+        emit WithdrawFromAave(aavePool, aaveToken, amount, store.aaveSuppliedBalance);
+    }
+
+    function claimAaveRewards(
+        SeniorStateStore storage store,
+        address receiver
+    ) internal returns (uint256) {
+        require(receiver != address(0), "AaveAdapter::INVALID_RECEIVER");
+        address aaveToken = store.config.mustGetAddress(AAVE_TOKEN);
+        uint256 amount = increasedBalance(store);
+        if (amount > 0) {
+            uint256 balanceBefore = tokenBalance(store.asset);
+            withdrawFromAave(store, amount);
+            require(
+                tokenBalance(store.asset) - balanceBefore >= amount,
+                "AaveAdapter::INVALID_INCREASED_BALANCE"
+            );
+            require(
+                tokenBalance(aaveToken) >= store.aaveSuppliedBalance,
+                "AaveAdapter::INVALID_A_BALANCE"
+            );
+            IERC20Upgradeable(store.asset).safeTransfer(receiver, amount);
+        }
+        return amount;
+    }
+
+    function claimableAaveExtraRewards(
+        SeniorStateStore storage store
+    ) internal view returns (address token, uint256 amount) {
+        address aaveToken = store.config.mustGetAddress(AAVE_TOKEN);
+        address aaveRewardController = store.config.mustGetAddress(AAVE_REWARDS_CONTROLLER);
+        address aaveExtraRewardToken = store.config.mustGetAddress(AAVE_EXTRA_REWARD_TOKEN);
+        address[] memory tokens = new address[](1);
+        tokens[0] = aaveToken;
+        token = aaveExtraRewardToken;
+        amount = IRewardsController(aaveRewardController).getUserRewards(
+            tokens,
+            address(this),
+            aaveExtraRewardToken
+        );
+    }
+
+    function claimAaveExtraRewards(
+        SeniorStateStore storage store,
+        address receiver
+    ) internal returns (address token, uint256 amount) {
+        address aaveToken = store.config.mustGetAddress(AAVE_TOKEN);
+        address aaveRewardController = store.config.mustGetAddress(AAVE_REWARDS_CONTROLLER);
+        address aaveExtraRewardToken = store.config.mustGetAddress(AAVE_EXTRA_REWARD_TOKEN);
+        address[] memory tokens = new address[](1);
+        tokens[0] = aaveToken;
+        token = aaveExtraRewardToken;
+        try
+            IRewardsController(aaveRewardController).claimRewards(
+                tokens,
+                type(uint256).max,
+                receiver,
+                aaveExtraRewardToken
+            )
+        returns (uint256 rewardAmount) {
+            amount = rewardAmount;
+        } catch {
+            amount = 0;
+        }
+    }
+
+    function tokenBalance(address token) internal view returns (uint256) {
+        return IERC20Upgradeable(token).balanceOf(address(this));
+    }
+
+    function increasedBalance(SeniorStateStore storage store) internal view returns (uint256) {
+        address aaveToken = store.config.mustGetAddress(AAVE_TOKEN);
+        return tokenBalance(aaveToken) - store.aaveSuppliedBalance;
     }
 }

@@ -226,7 +226,7 @@ contract RouterV1 is
     }
 
     // Idle => BuyJunior => Idle
-    function refundJunior() external notPending nonReentrant onlyRole(KEEPER_ROLE) {
+    function refundJunior() external nonReentrant onlyRole(KEEPER_ROLE) {
         require(_store.pendingRefundAssets != 0, "RouterV1::NO_REFUND_ASSETS");
         require(_store.users[address(0)].status == UserStatus.Idle, "RouterV1::INPROPER_STATUS");
         _store.updateRewards();

@@ -48,6 +48,22 @@ contract SeniorConfig {
         return seniorVault.getConfig(keccak256(abi.encode(MAX_BORROWS, vault))).toUint256();
     }
 
+    function aavePool() public view virtual returns (address) {
+        return seniorVault.getConfig(AAVE_POOL).toAddress();
+    }
+
+    function aaveToken() public view virtual returns (address) {
+        return seniorVault.getConfig(AAVE_TOKEN).toAddress();
+    }
+
+    function aaveRewardsController() public view virtual returns (address) {
+        return seniorVault.getConfig(AAVE_REWARDS_CONTROLLER).toAddress();
+    }
+
+    function aaveExtraRewardToken() public view virtual returns (address) {
+        return seniorVault.getConfig(AAVE_EXTRA_REWARD_TOKEN).toAddress();
+    }
+
     function assetSupplyCap() public view virtual returns (uint256) {
         return seniorVault.getConfig(ASSET_SUPPLY_CAP).toUint256();
     }
@@ -77,5 +93,25 @@ contract SeniorConfig {
 
     function setAssetSupplyCap(uint256 newAssetCap) public virtual onlyAdmin {
         seniorVault.setConfig(ASSET_SUPPLY_CAP, newAssetCap.toBytes32());
+    }
+
+    function setAavePool(address aavePool_) public virtual onlyAdmin {
+        require(aavePool_ != address(0), "SeniorConfig::INVALID_ADDRESS");
+        seniorVault.setConfig(AAVE_POOL, aavePool_.toBytes32());
+    }
+
+    function setAaveToken(address aaveToken_) public virtual onlyAdmin {
+        require(aaveToken_ != address(0), "SeniorConfig::INVALID_ADDRESS");
+        seniorVault.setConfig(AAVE_TOKEN, aaveToken_.toBytes32());
+    }
+
+    function setAaveRewardsController(address aaveRewardsController_) public virtual onlyAdmin {
+        require(aaveRewardsController_ != address(0), "SeniorConfig::INVALID_ADDRESS");
+        seniorVault.setConfig(AAVE_REWARDS_CONTROLLER, aaveRewardsController_.toBytes32());
+    }
+
+    function setAaveExtraRewardToken(address aaveExtraRewardToken_) public virtual onlyAdmin {
+        require(aaveExtraRewardToken_ != address(0), "SeniorConfig::INVALID_ADDRESS");
+        seniorVault.setConfig(AAVE_EXTRA_REWARD_TOKEN, aaveExtraRewardToken_.toBytes32());
     }
 }
