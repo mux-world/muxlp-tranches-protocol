@@ -135,6 +135,82 @@ describe("Mock-mockers", async () => {
     expect(await dep.arb.balanceOf(alice.address)).to.equal(toWei("1.050000000537600000"));
   });
 
+  it("mock aave: large deposit + deposit", async () => {
+    // deposit
+    await dep.ausdc.setBlockTime(86400 + 0);
+    await dep.aaveRewardsController.setBlockTime(86400 + 0);
+    await dep.usdc.mint(alice.address, toUnit("8901234567890.654321", 6));
+    await dep.usdc.connect(alice).approve(dep.aavePool.address, toUnit("8901234567890.654321", 6));
+    await dep.aavePool
+      .connect(alice)
+      .supply(dep.usdc.address, toUnit("8901234567890.654321", 6), alice.address, 0 /* referral */);
+    expect(await dep.usdc.balanceOf(alice.address)).to.equal(toUnit("0", 6));
+    expect(await dep.ausdc.balanceOf(alice.address)).to.equal(toUnit("8901234567890.654321", 6));
+
+    // deposit again
+    await dep.ausdc.setBlockTime(86400 + 86400 * 365);
+    await dep.aaveRewardsController.setBlockTime(86400 + 86400 * 365);
+    expect(await dep.ausdc.balanceOf(alice.address)).to.equal(toUnit("9346296296285.187037", 6)); // 105%
+    await dep.usdc.mint(alice.address, toUnit("8901234567890.654321", 6));
+    await dep.usdc.connect(alice).approve(dep.aavePool.address, toUnit("8901234567890.654321", 6));
+    await dep.aavePool
+      .connect(alice)
+      .supply(dep.usdc.address, toUnit("8901234567890.654321", 6), alice.address, 0 /* referral */);
+    expect(await dep.usdc.balanceOf(alice.address)).to.equal(toUnit("0", 6));
+    expect(await dep.ausdc.balanceOf(alice.address)).to.equal(toUnit("18247530864175.841358", 6)); // += 8901234567890.654321
+  });
+
+  it("mock aave: partial withdraw", async () => {
+    // deposit
+    await dep.ausdc.setBlockTime(86400 + 0);
+    await dep.aaveRewardsController.setBlockTime(86400 + 0);
+    await dep.usdc.mint(alice.address, toUnit("100", 6));
+    await dep.usdc.connect(alice).approve(dep.aavePool.address, toUnit("100", 6));
+    await dep.aavePool
+      .connect(alice)
+      .supply(dep.usdc.address, toUnit("100", 6), alice.address, 0 /* referral */);
+    expect(await dep.usdc.balanceOf(alice.address)).to.equal(toUnit("0", 6));
+    expect(await dep.ausdc.balanceOf(alice.address)).to.equal(toUnit("100", 6));
+
+    // withdraw
+    await dep.ausdc.setBlockTime(86400 + 86400 * 365);
+    await dep.aaveRewardsController.setBlockTime(86400 + 86400 * 365);
+    expect(await dep.ausdc.balanceOf(alice.address)).to.equal(toUnit("105", 6));
+    await dep.aavePool.connect(alice).withdraw(dep.usdc.address, toUnit("5", 6), alice.address);
+    expect(await dep.usdc.balanceOf(alice.address)).to.equal(toUnit("5", 6));
+    expect(await dep.ausdc.balanceOf(alice.address)).to.equal(toUnit("99.999999", 6));
+    expect(
+      await dep.aaveRewardsController.callStatic.getUserRewards(
+        [dep.ausdc.address],
+        alice.address,
+        dep.arb.address
+      )
+    ).to.equal(toWei("1.050000000537600000")); // 105 * 0.01
+  });
+
+  it("mock aave: large deposit + partial withdraw", async () => {
+    // deposit
+    await dep.ausdc.setBlockTime(86400 + 0);
+    await dep.aaveRewardsController.setBlockTime(86400 + 0);
+    await dep.usdc.mint(alice.address, toUnit("8901234567890.654321", 6));
+    await dep.usdc.connect(alice).approve(dep.aavePool.address, toUnit("8901234567890.654321", 6));
+    await dep.aavePool
+      .connect(alice)
+      .supply(dep.usdc.address, toUnit("8901234567890.654321", 6), alice.address, 0 /* referral */);
+    expect(await dep.usdc.balanceOf(alice.address)).to.equal(toUnit("0", 6));
+    expect(await dep.ausdc.balanceOf(alice.address)).to.equal(toUnit("8901234567890.654321", 6));
+
+    // withdraw
+    await dep.ausdc.setBlockTime(86400 + 86400 * 365);
+    await dep.aaveRewardsController.setBlockTime(86400 + 86400 * 365);
+    expect(await dep.ausdc.balanceOf(alice.address)).to.equal(toUnit("9346296296285.187037", 6)); // 105%
+    await dep.aavePool
+      .connect(alice)
+      .withdraw(dep.usdc.address, toUnit("445061728394.532720", 6), alice.address); // withdraw 5%
+    expect(await dep.usdc.balanceOf(alice.address)).to.equal(toUnit("445061728394.532720", 6));
+    expect(await dep.ausdc.balanceOf(alice.address)).to.equal(toUnit("8901234567890.654317", 6));
+  });
+
   it("mock aave: deposit, claim, claim", async () => {
     // deposit
     await dep.ausdc.setBlockTime(86400 + 0);

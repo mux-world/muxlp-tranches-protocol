@@ -194,7 +194,7 @@ describe("Mock-Cancel", async () => {
     // aUSDC = 250524.85 * 0.05 / 365 / 86400 * 60 * 30 * 1 = 0.714968
     // arb = (250524.85 + 0.714968) * 0.01 / 365 / 86400 * 60 * 30 * 1 = 0.142994043931506849
     // acc senior = 10.273979 + 1.54002 + 0.714968 + 0.142994043931506849 = 12.672 => 11
-    expect(await dep.ausdc.balanceOf(senior.address)).to.equal(toUnit("250525.564968", 6));
+    expect(await dep.ausdc.balanceOf(senior.address)).to.be.closeTo(toUnit("250525.564969", 6), 1);
     expect(await router.callStatic.claimableSeniorRewards(alice.address)).to.equal(
       toUnit("11.0", 6)
     );
@@ -308,7 +308,7 @@ describe("Mock-Cancel", async () => {
     // arb = (250524.85 + 0.714968) * 0.01 / 365 / 86400 * 60 * 30 * 1 = 0.142994043931506849
     // acc senior = 10.273979 + 3.8484262 + 0.714968 + 0.142994043931506849 = 14.980367 =>
     // = 16.5204 => 15
-    expect(await dep.ausdc.balanceOf(senior.address)).to.equal(toUnit("250525.564968", 6));
+    expect(await dep.ausdc.balanceOf(senior.address)).to.be.closeTo(toUnit("250525.564969", 6), 1);
     expect(await router.callStatic.claimableSeniorRewards(alice.address)).to.equal(
       toUnit("15.0", 6)
     );
@@ -329,7 +329,7 @@ describe("Mock-Cancel", async () => {
       expect(isBalancing).to.be.true;
     }
     // aUSDC = 250524.85 - 149213.051092
-    expect(await dep.ausdc.balanceOf(senior.address)).to.equal(toUnit("101311.798908", 6));
+    expect(await dep.ausdc.balanceOf(senior.address)).to.be.closeTo(toUnit("101311.798909", 6), 1);
 
     // cancel
     await router.connect(keeper).cancelRebalancePendingOperation();

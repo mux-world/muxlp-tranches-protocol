@@ -231,7 +231,7 @@ library SeniorVaultImp {
         uint256 aaveTokenBalance = tokenBalance(aaveToken);
         IPool(aavePool).supply(store.asset, amount, address(this), 0);
         require(
-            tokenBalance(aaveToken) - aaveTokenBalance >= amount,
+            tokenBalance(aaveToken) - aaveTokenBalance >= ignoreRoundingError(amount),
             "AaveAdapter::UNEXPECTED_RECEIVE_AMOUNT"
         );
         store.aaveSuppliedBalance += amount;
@@ -262,7 +262,7 @@ library SeniorVaultImp {
         uint256 depositTokenBalance = tokenBalance(store.asset);
         IPool(aavePool).withdraw(store.asset, amount, address(this));
         require(
-            tokenBalance(store.asset) - depositTokenBalance >= amount,
+            tokenBalance(store.asset) - depositTokenBalance >= ignoreRoundingError(amount),
             "AaveAdapter::UNEXPECTED_RECEIVE_AMOUNT"
         );
         emit WithdrawFromAave(aavePool, aaveToken, amount, store.aaveSuppliedBalance);
@@ -275,19 +275,21 @@ library SeniorVaultImp {
         require(receiver != address(0), "AaveAdapter::INVALID_RECEIVER");
         address aaveToken = store.config.mustGetAddress(AAVE_TOKEN);
         uint256 amount = increasedBalance(store);
+        // to avoid rounding error involved by aave viarant balance
         if (amount > 0) {
             uint256 balanceBefore = tokenBalance(store.asset);
             withdrawFromAave(store, amount);
             require(
-                tokenBalance(store.asset) - balanceBefore >= amount,
+                tokenBalance(store.asset) - balanceBefore >= ignoreRoundingError(amount),
                 "AaveAdapter::INVALID_INCREASED_BALANCE"
             );
             require(
-                tokenBalance(aaveToken) >= store.aaveSuppliedBalance,
+                tokenBalance(aaveToken) >= ignoreRoundingError(store.aaveSuppliedBalance),
                 "AaveAdapter::INVALID_A_BALANCE"
             );
             IERC20Upgradeable(store.asset).safeTransfer(receiver, amount);
         }
+
         return amount;
     }
 
@@ -337,6 +339,15 @@ library SeniorVaultImp {
 
     function increasedBalance(SeniorStateStore storage store) internal view returns (uint256) {
         address aaveToken = store.config.mustGetAddress(AAVE_TOKEN);
-        return tokenBalance(aaveToken) - store.aaveSuppliedBalance;
+        uint256 balance = tokenBalance(aaveToken);
+        if (balance > store.aaveSuppliedBalance) {
+            return balance - store.aaveSuppliedBalance;
+        } else {
+            return 0;
+        }
+    }
+
+    function ignoreRoundingError(uint256 n) internal pure returns (uint256) {
+        return n > 0 ? n - 1 : 0;
     }
 }

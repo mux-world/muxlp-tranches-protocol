@@ -33,7 +33,7 @@ contract TrancheReader {
         IJuniorVault junior = IJuniorVault(juniorAddress);
         ISeniorVault senior = ISeniorVault(seniorAddress);
 
-        // info.blockNumber = ArbSys(address(100)).arbBlockNumber();
+        info.blockNumber = ArbSys(address(100)).arbBlockNumber();
         info.juniorTotalAssets = junior.totalAssets();
         info.juniorTotalSupply = junior.totalSupply();
         info.borrowedAssets = senior.borrows(routerAddress);

@@ -3,15 +3,48 @@ pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/token/ERC20/presets/ERC20PresetMinterPauser.sol";
 
+// caution: this is a mock, we only implement necessary functions. do not use this in production
+library MockRayMath {
+    uint256 internal constant RAY = 1e27;
+    uint256 internal constant HALF_RAY = 0.5e27;
+
+    // see https://twitter.com/transmissions11/status/1451131036377571328
+    function rayMul(uint256 a, uint256 b) internal pure returns (uint256 c) {
+        assembly {
+            if iszero(or(iszero(b), iszero(gt(a, div(sub(not(0), HALF_RAY), b))))) {
+                revert(0, 0)
+            }
+
+            c := div(add(mul(a, b), HALF_RAY), RAY)
+        }
+    }
+
+    // see https://twitter.com/transmissions11/status/1451131036377571328
+    function rayDiv(uint256 a, uint256 b) internal pure returns (uint256 c) {
+        assembly {
+            if or(iszero(b), iszero(iszero(gt(a, div(sub(not(0), div(b, 2)), RAY))))) {
+                revert(0, 0)
+            }
+
+            c := div(add(mul(a, RAY), div(b, 2)), b)
+        }
+    }
+}
+
 contract MockAToken is ERC20 {
-    mapping(address => uint) _lastUpdateTime;
-    uint256 public apy; // 1e18
+    using MockRayMath for uint256;
+
+    uint32 _lastUpdateTime;
+    uint256 _navRay; // 1e27
+    uint256 _apyRay; // 1e18
     uint32 public blockTime;
 
-    constructor(string memory name, string memory symbol) ERC20(name, symbol) {}
+    constructor(string memory name, string memory symbol) ERC20(name, symbol) {
+        _navRay = MockRayMath.RAY;
+    }
 
-    function setApy(uint256 apy_) external {
-        apy = apy_;
+    function setApy(uint256 apy_ /* 1e18 */) external {
+        _apyRay = apy_ * 1e9;
     }
 
     function setBlockTime(uint32 blockTime_) external {
@@ -22,31 +55,51 @@ contract MockAToken is ERC20 {
         return blockTime;
     }
 
-    function balanceOf(address account) public view override returns (uint256) {
-        return ERC20.balanceOf(account) + _earned(account);
+    function balanceOf(address user) public view virtual override(ERC20) returns (uint256) {
+        uint256 navRay = _nextNavRay();
+
+        // AToken
+        return super.balanceOf(user).rayMul(navRay);
     }
 
     function mint(address account, uint256 amount) public {
-        _payInterest(account);
-        _mint(account, amount);
+        _payInterest();
+        // AToken: _mintScaled(account, amount, _navRay);
+        uint256 index = _navRay;
+        // ScaledBalanceTokenBase:
+        uint256 amountScaled = amount.rayDiv(index);
+        require(amountScaled != 0, "INVALID_MINT_AMOUNT");
+        _mint(account, amountScaled);
     }
 
     function burn(address account, uint256 amount) public {
-        _payInterest(account);
-        _burn(account, amount);
+        _payInterest();
+        // AToken: _burnScaled(account, amount, _navRay);
+        uint256 index = _navRay;
+        // ScaledBalanceTokenBase:
+        uint256 amountScaled = amount.rayDiv(index);
+        require(amountScaled != 0, "INVALID_BURN_AMOUNT");
+        _burn(account, amountScaled);
     }
 
-    function _payInterest(address account) internal {
-        uint256 e = _earned(account);
-        _mint(account, e);
-        _lastUpdateTime[account] = _blockTimestamp();
+    function _transfer(address from, address to, uint256 amount) internal override {
+        uint256 index = _navRay;
+        uint256 amountScaled = amount.rayDiv(index);
+        ERC20._transfer(from, to, amountScaled);
     }
 
-    function _earned(address account) internal view returns (uint256) {
-        uint256 balance = ERC20.balanceOf(account);
-        uint256 lastUpdate = _lastUpdateTime[account];
-        uint256 timePassed = _blockTimestamp() - lastUpdate;
-        return (balance * apy * timePassed) / (365 days) / 1e18; // 6 + 18 + 0 - 18
+    function _payInterest() internal {
+        _navRay = _nextNavRay();
+        _lastUpdateTime = _blockTimestamp();
+    }
+
+    function _nextNavRay() internal view returns (uint256) {
+        uint256 timePassed = _blockTimestamp() - _lastUpdateTime;
+        // index_a_n = index_a_n-1 * (1 + r * t)
+        uint256 ret = (_apyRay * timePassed) / (365 days); // 27 + 0 - 0
+        ret += MockRayMath.RAY;
+        ret = _navRay.rayMul(ret);
+        return ret;
     }
 }
 

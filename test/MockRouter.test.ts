@@ -129,13 +129,13 @@ describe("Mock-Router", async () => {
     await dep.usdc.connect(alice).approve(router.address, toUnit("1000000", 6));
     await router.connect(alice).depositSenior(toUnit("1000000", 6));
     expect(await senior.balanceOf(alice.address)).to.equal(toWei("2000000"));
-    expect(await dep.ausdc.balanceOf(senior.address)).to.equal(toUnit("2000000", 6));
+    expect(await dep.ausdc.balanceOf(senior.address)).to.be.closeTo(toUnit("2000000", 6), 1);
 
     // withdraw senior
     await router.connect(alice).withdrawSenior(toWei("1000000"), true);
     expect(await dep.usdc.balanceOf(alice.address)).to.equal(toUnit("1000000", 6));
     expect(await senior.balanceOf(alice.address)).to.equal(toWei("1000000"));
-    expect(await dep.ausdc.balanceOf(senior.address)).to.equal(toUnit("1000000", 6));
+    expect(await dep.ausdc.balanceOf(senior.address)).to.be.closeTo(toUnit("999999.999999", 6), 1);
 
     // withdraw senior again
     await setMockersBlockTime(dep, 86400 + 86400 * 365);
@@ -231,6 +231,7 @@ describe("Mock-Router", async () => {
       expect(await junior.callStatic.totalAssets()).to.equal(toWei("499650.1"));
       expect(await router.callStatic.juniorNavPerShare(sPrice, jPrice)).to.equal(toWei("1")); // (499650.1 - 0) / 499650.1
     }
+
     // junior = 0
     expect(await router.callStatic.claimableJuniorRewards(alice.address)).to.equal(toUnit("0", 6));
     // acc junior = 0
@@ -262,8 +263,10 @@ describe("Mock-Router", async () => {
     }
     // acc junior = 0
     expect(await router.callStatic.claimableJuniorRewards(alice.address)).to.equal(toUnit("0", 6));
+
     // acc senior = 10.273979
     expect(await dep.ausdc.balanceOf(senior.address)).to.equal(toUnit("250524.85", 6)); // 1000000 - 749475.15
+
     expect(await router.callStatic.claimableSeniorRewards(alice.address)).to.equal(
       toUnit("9", 6) // unchanged
     );
@@ -282,6 +285,7 @@ describe("Mock-Router", async () => {
       expect(await junior.callStatic.totalAssets()).to.equal(toWei("1248600.617395")); // 499650.1 + 749475.15 * 1 / 1 * (1 - 0.0007)
       expect(await router.callStatic.juniorNavPerShare(sPrice, jPrice)).to.equal(toWei("0.99895")); // (1248600.617395 * 1 - 749475.15) / 499650.1
     }
+
     // acc junior = 0
     // mlp reward = 499650.1 * (0.000000000002113986 * 3000 + 0.000000001109842719 * 2) * (60 * 30)  // deposit <-> rebalance
     //            = 7.700086
@@ -295,7 +299,7 @@ describe("Mock-Router", async () => {
     // aUSDC = 250524.85 * 0.05 / 365 / 86400 * 60 * 30 * 1 = 0.714968
     // arb = (250524.85 + 0.714968) * 0.01 / 365 / 86400 * 60 * 30 * 1 = 0.142994043931506849
     // acc senior = 10.273979 + 1.54002 + 0.714968 + 0.142994043931506849 = 12.672 => 11
-    expect(await dep.ausdc.balanceOf(senior.address)).to.equal(toUnit("250525.564968", 6));
+    expect(await dep.ausdc.balanceOf(senior.address)).to.be.closeTo(toUnit("250525.564968", 6), 1);
     expect(await router.callStatic.claimableSeniorRewards(alice.address)).to.equal(
       toUnit("11.0", 6)
     );
@@ -317,7 +321,7 @@ describe("Mock-Router", async () => {
     // aUSDC = 250524.85 * 0.05 / 365 / 86400 * (60 * 30 * 1 + 86400 * 365) = 12526.957468
     // arb = (250524.85 + 12526.957468) * 0.01 / 365 / 86400 * (60 * 30 * 1 + 86400 * 365) = 2630.668218405723744292
     // acc senior = 67424.430208 + 12.672 + 12526.957468 + 2630.668218405723744292 = 82594.727894 => 82592.0
-    expect(await dep.ausdc.balanceOf(senior.address)).to.equal(toUnit("263051.807468", 6));
+    expect(await dep.ausdc.balanceOf(senior.address)).to.be.closeTo(toUnit("263051.807467", 6), 1);
     expect(await router.callStatic.claimableSeniorRewards(alice.address)).to.equal(
       toUnit("82592.0", 6)
     );
