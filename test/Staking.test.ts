@@ -35,13 +35,6 @@ describe("Staking", async () => {
   let smlp;
   let vester;
 
-  const a2b = (a) => {
-    return a + "000000000000000000000000";
-  };
-  const u2b = (u) => {
-    return ethers.utils.hexZeroPad(u.toHexString(), 32);
-  };
-
   async function deployTestSuite() {
     const accounts = await ethers.getSigners();
 

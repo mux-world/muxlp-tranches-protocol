@@ -35,13 +35,6 @@ describe("Test", async () => {
   let orderBook;
   let liquidityPool;
 
-  const a2b = (a) => {
-    return a + "000000000000000000000000";
-  };
-  const u2b = (u) => {
-    return ethers.utils.hexZeroPad(u.toHexString(), 32);
-  };
-
   beforeEach(async () => {
     const accounts = await ethers.getSigners();
     user0 = accounts[0];
