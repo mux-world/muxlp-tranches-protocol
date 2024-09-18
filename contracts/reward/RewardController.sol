@@ -3,8 +3,8 @@ pragma solidity 0.8.17;
 
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/interfaces/IERC4626Upgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC20/IERC20Upgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/IERC20MetadataUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC20/utils/SafeERC20Upgradeable.sol";
 import "@uniswap/v3-periphery/contracts/interfaces/ISwapRouter.sol";
 import "@uniswap/v3-periphery/contracts/interfaces/IQuoter.sol";
@@ -12,12 +12,14 @@ import "@uniswap/v3-periphery/contracts/interfaces/IQuoter.sol";
 import "../interfaces/ISeniorVault.sol";
 import "../interfaces/IJuniorVault.sol";
 import "../interfaces/IRewardDistributor.sol";
+import "../interfaces/chainlink/IPriceFeed.sol";
 
 contract RewardController is OwnableUpgradeable, ReentrancyGuardUpgradeable {
     using SafeERC20Upgradeable for IERC20Upgradeable;
 
     uint256 constant YEAR = 365 * 86400;
     uint256 constant ONE = 1e18;
+    uint256 constant ORALCE_PRICE_EXPIRATION = 30 * 3600;
 
     address public rewardToken;
     IRewardDistributor public seniorRewardDistributor;
@@ -37,6 +39,14 @@ contract RewardController is OwnableUpgradeable, ReentrancyGuardUpgradeable {
     uint256 public lastSeniorExtraNotifyTime;
     uint256 public lastJuniorExtraNotifyTime;
 
+    struct SlippageConfigData {
+        address oracle;
+        uint256 decimals;
+        uint256 slippage;
+        bool ignoreSlippage;
+    }
+    mapping(address => SlippageConfigData) public slippageConfigs;
+
     event DistributeReward(address indexed receiver, uint256 amount, uint256 timespan);
     event SetHandler(address indexed handler, bool enable);
     event SetMinStableApy(uint256 prevMinApy, uint256 newMinApy);
@@ -45,6 +55,8 @@ contract RewardController is OwnableUpgradeable, ReentrancyGuardUpgradeable {
     event SetInitialTime(uint256 prevTime, uint256 newTime);
     event SetUniswapContracts(address uniswapRouter, address uniswapQuoter);
     event SetSwapPaths(address rewardToken, bytes[] paths);
+    event SetDefaultSlippage(uint256 slippage);
+    event SetSlippage(address token, SlippageConfigData slippageConfig);
 
     modifier onlyHandler() {
         require(isHandler[msg.sender], "RewardController::HANDLER_ONLY");
@@ -109,6 +121,19 @@ contract RewardController is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         emit SetSwapPaths(rewardToken_, paths);
     }
 
+    function setSlippageConfig(
+        address token,
+        address oracle,
+        uint256 decimals,
+        uint256 slippage,
+        bool ignoreSlippage
+    ) external onlyOwner {
+        require(slippage <= ONE, "RewardController::INVALID_SLIPPAGE");
+        require(decimals <= 18, "RewardController::INVALID_DECIMALS");
+        slippageConfigs[token] = SlippageConfigData(oracle, decimals, slippage, ignoreSlippage);
+        emit SetSlippage(token, slippageConfigs[token]);
+    }
+
     function calculateRewardDistribution(
         uint256 utilizedAmount,
         uint256 rewardAmount,
@@ -126,6 +151,7 @@ contract RewardController is OwnableUpgradeable, ReentrancyGuardUpgradeable {
             uint256 minSeniorRewards = (((utilizedAmount * minSeniorApy) / ONE) * timespan) / YEAR;
             seniorRewards = (rewardAmount * seniorRewardRate) / ONE;
             juniorRewards = 0;
+
             // if minSeniorApy applied
             if (minSeniorApy > 0) {
                 if (rewardAmount <= minSeniorRewards) {
@@ -200,7 +226,10 @@ contract RewardController is OwnableUpgradeable, ReentrancyGuardUpgradeable {
             if (rewardTokens[i] == rewardToken) {
                 rewardAmount += rewardAmounts[i];
             } else {
-                rewardAmount += _swapToken(rewardTokens[i], rewardAmounts[i]);
+                // get prioce
+                uint256 minOut = _getReferenceTokenMinOut(rewardTokens[i], rewardAmounts[i]);
+                minOut = _toDecimals(rewardTokens[i], rewardToken, minOut);
+                rewardAmount += _swapToken(rewardTokens[i], rewardAmounts[i], minOut);
             }
         }
         uint256 balance = IERC20Upgradeable(rewardToken).balanceOf(address(this));
@@ -236,7 +265,9 @@ contract RewardController is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         if (token == rewardToken) {
             rewardAmount = amount;
         } else {
-            rewardAmount = _swapToken(token, amount);
+            uint256 minOut = _getReferenceTokenMinOut(token, amount);
+            minOut = _toDecimals(token, rewardToken, minOut);
+            rewardAmount = _swapToken(token, amount, minOut);
         }
         uint256 balance = IERC20Upgradeable(rewardToken).balanceOf(address(this));
         require(balance >= rewardAmount, "RewardController::INSUFFICIENT_BALANCE");
@@ -256,7 +287,9 @@ contract RewardController is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         if (token == rewardToken) {
             rewardAmount = amount;
         } else {
-            rewardAmount = _swapToken(token, amount);
+            uint256 minOut = _getReferenceTokenMinOut(token, amount);
+            minOut = _toDecimals(token, rewardToken, minOut);
+            rewardAmount = _swapToken(token, amount, minOut);
         }
         uint256 balance = IERC20Upgradeable(rewardToken).balanceOf(address(this));
         require(balance >= rewardAmount, "RewardController::INSUFFICIENT_BALANCE");
@@ -271,7 +304,11 @@ contract RewardController is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         }
     }
 
-    function _swapToken(address token, uint256 amount) internal returns (uint256 outAmount) {
+    function _swapToken(
+        address token,
+        uint256 amount,
+        uint256 minOut
+    ) internal returns (uint256 outAmount) {
         bytes[] storage candicates = swapPaths[token];
         require(candicates.length > 0, "RewardController::NO_CANDICATES");
         if (amount == 0) {
@@ -280,6 +317,7 @@ contract RewardController is OwnableUpgradeable, ReentrancyGuardUpgradeable {
             (uint256 index, uint256 expectOutAmount) = _evaluateOutAmount(candicates, amount);
             outAmount = _swap(candicates[index], token, amount, expectOutAmount);
         }
+        require(outAmount >= minOut, "RewardController::INSUFFICIENT_OUT_AMOUNT");
     }
 
     function _evaluateOutAmount(
@@ -313,5 +351,43 @@ contract RewardController is OwnableUpgradeable, ReentrancyGuardUpgradeable {
         });
         IERC20Upgradeable(tokenIn).approve(address(uniswapRouter), amountIn);
         outAmount = uniswapRouter.exactInput(params);
+    }
+
+    function _getReferenceTokenMinOut(
+        address token,
+        uint256 amount
+    ) internal view returns (uint256) {
+        SlippageConfigData memory config = slippageConfigs[token];
+        if (config.ignoreSlippage) {
+            return 0;
+        }
+        require(config.oracle != address(0), "RewardController::NO_ORACLE_SET");
+        (, int256 price, , uint256 timestamp, ) = IPriceFeed(config.oracle).latestRoundData();
+        require(price > 0, "RewardController::INVALID_PRICE");
+        require(
+            timestamp + ORALCE_PRICE_EXPIRATION > block.timestamp,
+            "RewardController::PRICE_EXPIRED"
+        );
+        return
+            (((amount * uint256(price)) / 10 ** config.decimals) * (ONE - config.slippage)) / ONE;
+    }
+
+    function _toDecimals(
+        address tokenFrom,
+        address tokenTo,
+        uint256 amountFrom
+    ) internal view returns (uint256) {
+        if (tokenFrom == tokenTo) {
+            return amountFrom;
+        }
+        uint256 decimalsFrom = IERC20MetadataUpgradeable(tokenFrom).decimals();
+        uint256 decimalsTo = IERC20MetadataUpgradeable(tokenTo).decimals();
+        if (decimalsFrom == decimalsTo) {
+            return amountFrom;
+        } else if (decimalsFrom > decimalsTo) {
+            return amountFrom / (10 ** (decimalsFrom - decimalsTo));
+        } else {
+            return amountFrom * (10 ** (decimalsTo - decimalsFrom));
+        }
     }
 }

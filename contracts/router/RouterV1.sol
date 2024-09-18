@@ -20,6 +20,7 @@ contract RouterV1 is
 {
     using RouterImp for RouterStateStore;
     using LibConfigSet for ConfigSet;
+    using SafeERC20Upgradeable for IERC20Upgradeable;
     using EnumerableSetUpgradeable for EnumerableSetUpgradeable.AddressSet;
 
     modifier notPending() {
@@ -273,6 +274,22 @@ contract RouterV1 is
         _store.updateRewards(msg.sender);
         _store.rewardController.migrateSeniorRewardFor(msg.sender, to);
         _store.seniorVault.transferFrom(msg.sender, to, balance);
+    }
+
+    function notifyArbRewards(uint256 amount) external nonReentrant {
+        uint256 utilized = _store.seniorVault.borrows(address(this));
+
+        address arbToken = address(0x912CE59144191C1204E64559FE8253a0e49E6548);
+        uint256 arbBalance = IERC20Upgradeable(arbToken).balanceOf(address(this));
+        require(arbBalance >= amount, "Insufficient balance");
+
+        address[] memory tokens = new address[](1);
+        uint256[] memory amounts = new uint256[](1);
+        tokens[0] = arbToken; // arb
+        amounts[0] = amount;
+
+        IERC20Upgradeable(arbToken).safeTransfer(address(_store.rewardController), amount);
+        _store.rewardController.notifyRewards(tokens, amounts, utilized);
     }
 
     // ============================================= Callbacks =============================================
