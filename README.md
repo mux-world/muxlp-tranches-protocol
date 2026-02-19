@@ -11,6 +11,10 @@ The core principle of MUXLP Tranches Protocol revolves around two distinct user 
 
 The protocol is designed to be used with the MUX protocol, but can be used with any ERC20 token.
 
+Update:
+
+- Rebalancer Keeper is obsoleted since 2024
+
 ## Architecture
 
 ![Alt text](misc/architecture.png?raw=true "Architecture")
